@@ -8,21 +8,13 @@
  * 기본값으로 렌더해 SSR↔클라이언트 불일치를 피한다(마운트 후 실제 상태 표시).
  */
 
-import { useSyncExternalStore } from "react";
+import Link from "next/link";
 import { useWizardStore } from "@/lib/store";
 import { WIZARD_STEPS } from "@/catalog";
 import { Stepper } from "./Stepper";
 import { StepContent } from "./StepContent";
 import { PreviewPanel } from "./PreviewPanel";
-
-/** 클라이언트 마운트(하이드레이션) 여부 — 서버=false, 클라이언트=true. persist 복원 전 깜빡임 방지. */
-function useHydrated(): boolean {
-  return useSyncExternalStore(
-    () => () => {},
-    () => true,
-    () => false,
-  );
-}
+import { useHydrated } from "./useHydrated";
 
 export function WizardShell() {
   const mounted = useHydrated();
@@ -70,17 +62,19 @@ export function WizardShell() {
           >
             이전
           </button>
-          <span className="text-xs text-muted" aria-live="polite">
+          <span className="flex items-center gap-3 text-xs text-muted" aria-live="polite">
             변경사항은 자동 저장됩니다
+            <button type="button" onClick={reset} className="underline hover:text-foreground">
+              초기화
+            </button>
           </span>
           {isLast ? (
-            <button
-              type="button"
-              onClick={reset}
-              className="rounded-md border border-border px-4 py-2 text-sm font-medium"
+            <Link
+              href="/wizard/review"
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
             >
-              처음부터
-            </button>
+              검토 &amp; 내보내기 →
+            </Link>
           ) : (
             <button
               type="button"

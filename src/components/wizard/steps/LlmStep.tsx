@@ -1,14 +1,14 @@
 "use client";
 
 /**
- * Step 6 — LLM (M3 기본판). 제공자 선택 → 해당 제공자의 모델만 노출(카탈로그 주도).
- * 모델 비교표·파라미터 슬라이더 등은 M4/M5 에서 확장한다.
+ * Step 6 — LLM. 제공자(카탈로그 주도) → 모델, 호출 방식, 파라미터, 가드레일, 세션, 예산(비용추정 입력).
  */
 
 import { useWizardStore } from "@/lib/store";
 import { LLM_PROVIDER_CATALOG, modelsByProvider } from "@/catalog";
 import { LLM_PROVIDERS, LLM_SERVINGS } from "@/lib/agent-spec";
 import { label } from "@/generators/format";
+import { SelectField, NumberField, ToggleField } from "../controls";
 
 export function LlmStep() {
   const llm = useWizardStore((s) => s.spec.llm);
@@ -17,7 +17,6 @@ export function LlmStep() {
 
   const onProvider = (provider: (typeof LLM_PROVIDERS)[number]) => {
     const first = modelsByProvider(provider)[0];
-    // 제공자를 바꾸면 모델을 해당 제공자의 첫 모델로 재설정(정합 유지)
     update("llm", { provider, model: first ? first.id : llm.model });
   };
 
@@ -46,37 +45,59 @@ export function LlmStep() {
         </div>
       </div>
 
-      <label className="block">
-        <span className="mb-1.5 block text-sm font-medium">모델</span>
-        <select
-          className="input"
-          value={llm.model}
-          onChange={(e) => update("llm", { model: e.target.value })}
-        >
-          {models.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.label}
-              {m.recommended ? " (권장)" : ""}
-              {m.domestic ? " · 국산" : ""}
-            </option>
-          ))}
-        </select>
-      </label>
+      <SelectField
+        label="모델"
+        value={llm.model}
+        onChange={(v) => update("llm", { model: v })}
+        options={models.map((m) => [m.id, `${m.label}${m.recommended ? " (권장)" : ""}${m.domestic ? " · 국산" : ""}`])}
+      />
+      <SelectField
+        label="호출 방식"
+        value={llm.serving}
+        onChange={(v) => update("llm", { serving: v as (typeof LLM_SERVINGS)[number] })}
+        options={LLM_SERVINGS.map((s) => [s, label("serving", s)])}
+        hint="폐쇄망이면 self-hosted(사내 추론)를 권장합니다."
+      />
 
-      <label className="block">
-        <span className="mb-1.5 block text-sm font-medium">호출 방식</span>
-        <select
-          className="input"
-          value={llm.serving}
-          onChange={(e) => update("llm", { serving: e.target.value as (typeof LLM_SERVINGS)[number] })}
-        >
-          {LLM_SERVINGS.map((s) => (
-            <option key={s} value={s}>
-              {label("serving", s)}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="grid grid-cols-2 gap-3">
+        <NumberField
+          label="temperature"
+          value={llm.params.temperature}
+          onChange={(v) => update("llm", { params: { ...llm.params, temperature: v ?? 0 } })}
+        />
+        <NumberField
+          label="max tokens"
+          value={llm.params.maxTokens}
+          onChange={(v) => update("llm", { params: { ...llm.params, maxTokens: v ?? 0 } })}
+        />
+      </div>
+
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium">가드레일</legend>
+        <ToggleField
+          label="근거 기반 답변 강제(환각 억제)"
+          checked={llm.guardrails.groundedOnly}
+          onChange={(v) => update("llm", { guardrails: { ...llm.guardrails, groundedOnly: v } })}
+        />
+        <ToggleField
+          label="민감정보(PII) 필터"
+          checked={llm.guardrails.piiFilter}
+          onChange={(v) => update("llm", { guardrails: { ...llm.guardrails, piiFilter: v } })}
+        />
+      </fieldset>
+
+      <ToggleField
+        label="멀티턴(대화 기억) 사용"
+        checked={llm.session.multiTurn}
+        onChange={(v) => update("llm", { session: { ...llm.session, multiTurn: v } })}
+      />
+
+      <NumberField
+        label="월 예상 질의 수 (비용 추정용)"
+        value={llm.budget?.estMonthlyQueries}
+        onChange={(v) => update("llm", { budget: { ...llm.budget, estMonthlyQueries: v } })}
+        hint="입력하면 검토 화면에서 월 비용을 추정합니다."
+      />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { describe, it, expect } from "vitest";
 import { createDraftSpec } from "@/lib/agent-spec";
 import { detectConflicts } from "@/lib/conflicts";
 import { getMissingRequired, isExportReady } from "@/lib/readiness";
+import { estimateMonthlyCost } from "@/lib/cost";
 import { cloudSpec, airgapSpec } from "@/generators/fixtures";
 
 const ids = (spec: ReturnType<typeof createDraftSpec>) =>
@@ -53,6 +54,37 @@ describe("detectConflicts", () => {
     expect(ids(spec)).toContain("C11");
   });
 
+  it("접근성 등급 불일치면 C4", () => {
+    const spec = createDraftSpec({
+      frontend: { a11yLevel: "kwcag-aaa" },
+      compliance: { a11y: "kwcag-aa" },
+    });
+    expect(ids(spec)).toContain("C4");
+  });
+
+  it("개인정보 수집 + 마스킹 꺼짐이면 C6", () => {
+    const spec = createDraftSpec({
+      compliance: { privacy: { collectsPii: true, masking: false } },
+    });
+    expect(ids(spec)).toContain("C6");
+  });
+
+  it("국내 보관 + 해외 클라우드 임베딩이면 C7", () => {
+    const spec = createDraftSpec({
+      compliance: { security: { dataResidencyKR: true } },
+      rag: { enabled: true, embedding: "openai-text-embedding-3-large", sources: ["upload-hwp"] },
+    });
+    expect(ids(spec)).toContain("C7");
+  });
+
+  it("오프라인 설치 패키지 + 공식 API LLM 이면 C10", () => {
+    const spec = createDraftSpec({
+      llm: { serving: "official-api" },
+      compliance: { procurement: { domesticPreferred: true, offlineInstaller: true } },
+    });
+    expect(ids(spec)).toContain("C10");
+  });
+
   it("cloud 픽스처(정상 구성)는 airgap 전용 충돌(C1·C2·C3)을 내지 않는다", () => {
     const got = ids(cloudSpec);
     expect(got).not.toContain("C1");
@@ -78,5 +110,27 @@ describe("getMissingRequired / isExportReady", () => {
 
   it("필수 입력이 채워진 cloud 픽스처는 export 준비됨", () => {
     expect(isExportReady(cloudSpec)).toBe(true);
+  });
+});
+
+describe("estimateMonthlyCost", () => {
+  it("self-hosted 는 토큰 과금 0", () => {
+    const e = estimateMonthlyCost(airgapSpec); // serving=self-hosted
+    expect(e.selfHosted).toBe(true);
+    expect(e.monthlyUsd).toBe(0);
+  });
+
+  it("질의 수가 없으면 추정 불가", () => {
+    expect(estimateMonthlyCost(cloudSpec).available).toBe(false);
+  });
+
+  it("질의 수 + 단가가 있으면 양수 추정", () => {
+    const spec = createDraftSpec({
+      llm: { provider: "claude", model: "claude-sonnet-4-6", serving: "official-api", budget: { estMonthlyQueries: 100000 } },
+    });
+    const e = estimateMonthlyCost(spec);
+    expect(e.available).toBe(true);
+    expect(e.monthlyUsd).toBeGreaterThan(0);
+    expect(e.monthlyKrw).toBeGreaterThan(0);
   });
 });

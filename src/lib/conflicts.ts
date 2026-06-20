@@ -8,6 +8,8 @@
  */
 
 import type { AgentSpec } from "@/lib/agent-spec";
+import { CLOUD_EMBEDDING_IDS } from "@/catalog";
+import { LLM_MODEL_CATALOG } from "@/catalog";
 
 export interface Conflict {
   /** 규칙 id (docs/spec-schema.md 표 기준, 예: "C1") */
@@ -18,8 +20,8 @@ export interface Conflict {
   message: string;
 }
 
-/** API 가 아니라 추론 서버가 필요한(=온프레미스 가능) 임베딩 모델 */
-const ONPREM_EMBEDDINGS = ["bge-m3", "kure", "ko-sroberta", "multilingual-e5"];
+/** 클라우드 임베딩 여부 (카탈로그 기준; 미상이면 클라우드로 보지 않음) */
+const isCloudEmbedding = (id: string) => CLOUD_EMBEDDING_IDS.includes(id);
 
 /** AgentSpec → 충돌 목록 (없으면 빈 배열) */
 export function detectConflicts(spec: AgentSpec): Conflict[] {
@@ -27,11 +29,11 @@ export function detectConflicts(spec: AgentSpec): Conflict[] {
   const airgap = spec.project.deployEnv === "on-premise-airgap";
 
   // C1: 폐쇄망 + 클라우드 임베딩
-  if (airgap && spec.rag.enabled && !ONPREM_EMBEDDINGS.includes(spec.rag.embedding)) {
+  if (airgap && spec.rag.enabled && isCloudEmbedding(spec.rag.embedding)) {
     out.push({
       id: "C1",
       section: "rag",
-      message: `폐쇄망인데 임베딩 \`${spec.rag.embedding}\`은 외부 API일 수 있습니다. 온프레미스 임베딩(BGE-M3 등)을 권장합니다.`,
+      message: `폐쇄망인데 임베딩 \`${spec.rag.embedding}\`은 외부 API입니다. 온프레미스 임베딩(BGE-M3 등)을 권장합니다.`,
     });
   }
 
@@ -90,6 +92,56 @@ export function detectConflicts(spec: AgentSpec): Conflict[] {
       id: "C11",
       section: "conversation",
       message: "다국어 운영인데 언어별 응답/지식소스 정책(i18n)이 없습니다. 정책을 설정하세요.",
+    });
+  }
+
+  // C4: 프론트엔드 접근성 등급과 컴플라이언스 접근성 등급 불일치
+  const a11yRank: Record<string, number> = {
+    none: 0,
+    "kwcag-a": 1,
+    "kwcag-aa": 2,
+    "kwcag-aaa": 3,
+  };
+  if (a11yRank[spec.frontend.a11yLevel] !== a11yRank[spec.compliance.a11y]) {
+    out.push({
+      id: "C4",
+      section: "compliance",
+      message: `프론트엔드 접근성(${spec.frontend.a11yLevel})과 컴플라이언스 접근성(${spec.compliance.a11y}) 등급이 다릅니다. 더 높은 등급으로 통일하세요.`,
+    });
+  }
+
+  // C6: 개인정보 수집 + 마스킹 미적용
+  if (spec.compliance.privacy.collectsPii && !spec.compliance.privacy.masking) {
+    out.push({
+      id: "C6",
+      section: "compliance",
+      message: "개인정보를 수집하는데 마스킹/비식별이 꺼져 있습니다. 마스킹·보관기간 설정을 권장합니다.",
+    });
+  }
+
+  // C7: 데이터 국내 보관 + 해외 클라우드 LLM/임베딩
+  const model = LLM_MODEL_CATALOG.find((m) => m.id === spec.llm.model);
+  const overseasLlm =
+    (spec.llm.provider === "openai" || (model && model.providerId === "openai")) &&
+    spec.llm.serving !== "self-hosted";
+  const overseasEmbedding = spec.rag.enabled && isCloudEmbedding(spec.rag.embedding);
+  if (spec.compliance.security.dataResidencyKR && (overseasLlm || overseasEmbedding)) {
+    out.push({
+      id: "C7",
+      section: "compliance",
+      message: "데이터 국내 보관 요건인데 해외 클라우드 LLM/임베딩을 씁니다. 국내 리전/온프레미스를 검토하세요.",
+    });
+  }
+
+  // C10: 오프라인 설치 패키지 요구 + 클라우드 의존(LLM/임베딩)
+  if (
+    spec.compliance.procurement?.offlineInstaller &&
+    (spec.llm.serving === "official-api" || overseasEmbedding)
+  ) {
+    out.push({
+      id: "C10",
+      section: "compliance",
+      message: "오프라인 설치 패키지를 요구하는데 클라우드 LLM/임베딩에 의존합니다. 온프레미스 구성으로 변경하세요.",
     });
   }
 

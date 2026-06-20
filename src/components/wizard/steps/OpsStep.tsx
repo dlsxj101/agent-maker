@@ -1,0 +1,88 @@
+"use client";
+
+import { useWizardStore } from "@/lib/store";
+import { OBSERVABILITY_METRICS, CACHING_LAYERS } from "@/lib/agent-spec";
+import { ToggleField, ChipMulti, TextField, Field } from "../controls";
+
+const OBS_LABELS: Record<string, string> = {
+  tokens: "토큰",
+  latency: "지연",
+  "error-rate": "에러율",
+  none: "없음",
+};
+const CACHE_LABELS: Record<string, string> = {
+  prompt: "프롬프트",
+  embedding: "임베딩",
+  response: "응답",
+  none: "없음",
+};
+
+export function OpsStep() {
+  const ops = useWizardStore((s) => s.spec.ops);
+  const update = useWizardStore((s) => s.updateSection);
+
+  return (
+    <div className="space-y-6">
+      <ToggleField
+        label="대화 로그/감사 이력 보관"
+        checked={ops.audit}
+        onChange={(v) => update("ops", { audit: v })}
+      />
+
+      <Field label="관측(Observability)">
+        <div className="space-y-3">
+          <ChipMulti
+            label="메트릭"
+            value={ops.observability?.metrics ?? []}
+            onChange={(v) =>
+              update("ops", {
+                observability: {
+                  metrics: v as ("tokens" | "latency" | "error-rate" | "none")[],
+                  adminDashboard: ops.observability?.adminDashboard ?? false,
+                  alertThreshold: ops.observability?.alertThreshold,
+                },
+              })
+            }
+            options={OBSERVABILITY_METRICS.map((m) => [m, OBS_LABELS[m] ?? m])}
+          />
+          <ToggleField
+            label="관리자 대시보드"
+            checked={ops.observability?.adminDashboard ?? false}
+            onChange={(v) =>
+              update("ops", {
+                observability: {
+                  metrics: ops.observability?.metrics ?? [],
+                  adminDashboard: v,
+                  alertThreshold: ops.observability?.alertThreshold,
+                },
+              })
+            }
+          />
+        </div>
+      </Field>
+
+      <ChipMulti
+        label="캐싱 전략"
+        value={ops.performance?.caching ?? []}
+        onChange={(v) =>
+          update("ops", { performance: { caching: v as ("prompt" | "embedding" | "response" | "none")[] } })
+        }
+        options={CACHING_LAYERS.map((c) => [c, CACHE_LABELS[c] ?? c])}
+      />
+
+      <TextField
+        label="지식베이스 갱신 주기 (선택)"
+        value={ops.process?.kbUpdateCycle ?? ""}
+        onChange={(v) =>
+          update("ops", { process: { ...ops.process, kbUpdateCycle: v || undefined } })
+        }
+        placeholder="예: 분기 1회"
+      />
+      <TextField
+        label="운영 담당 (선택)"
+        value={ops.process?.owner ?? ""}
+        onChange={(v) => update("ops", { process: { ...ops.process, owner: v || undefined } })}
+      />
+    </div>
+  );
+}

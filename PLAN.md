@@ -308,10 +308,13 @@ AgentSpec {
   - ✅ **Step 1(디자인) 실시간 미리보기**: 프리셋 테마 + 커스텀 컬러 픽커(8토큰) + 폰트(제목/본문) + 챗 위젯 스타일(모서리/정렬/입력창/밀도/아바타) + 모드/레이아웃 → 우측 `ChatPreview` 라이브 렌더 (`src/components/wizard/ChatPreview.tsx`, `DesignStep.tsx`)
   - ⏭️ 나머지 스텝 카드형 폼 확장은 M5(전 스텝 완성)와 통합.
 
-- **M5 — 나머지 카탈로그 + 전 스텝 완성 + 검토/충돌**
-  - Step 2~5, 7~11 카탈로그 데이터화(특히 RAG·대화설계·평가·운영 — 분량 큼)
-  - 각 스텝 UI 연결, 검토(Review) 화면, 충돌·누락 경고 완성 + **export 차단 게이트**
-  - Review에 비용 추정 요약 노출
+- **M5 — 나머지 카탈로그 + 전 스텝 완성 + 검토/충돌** ✅ *(완료)*
+  - ✅ 카탈로그 추가: RAG(임베딩/VectorDB/리랭커 `catalog/rag.ts`), 백엔드 프레임워크(`catalog/backend.ts`), LLM 단가
+  - ✅ 전 12스텝 폼 완성(`components/wizard/steps/*` + 공용 컨트롤 `controls.tsx`) — project/design/frontend/backend/database/rag/llm/conversation/integrations/evaluation/compliance/ops
+  - ✅ 검토(Review) 화면(`Review.tsx`, `/wizard/review`): 충돌·누락 표시, 파일 미리보기 탭, **ZIP 내보내기**(브라우저 다운로드)
+  - ✅ **export 차단 게이트**: 필수 누락 시 내보내기 버튼 비활성화(`readiness.ts`)
+  - ✅ 충돌 규칙 완성(C1~C11) + **비용 추정**(`cost.ts`) Review 노출
+  - 단위 테스트: 충돌/준비도/비용 17케이스 (총 39 통과)
 
 - **M6 — 전체 회귀 검증 & 배포 & 문서화**
   - **완성된 카탈로그로 산출물 E2E 재검증** (대표 프로필 ≥2: 폐쇄망/클라우드) — M2 검증을 전 범위로 확장

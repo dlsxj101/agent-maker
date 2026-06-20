@@ -51,6 +51,9 @@ export interface LlmModel {
   domestic?: boolean;
   /** 폐쇄망에서 self-hosted 가능한 오픈소스 여부 */
   openSource?: boolean;
+  /** 대략 단가(USD / 1M tokens) — 비용 추정용. 추정값이며 실제 단가는 제공자 고지 기준. */
+  priceInPerMTok?: number;
+  priceOutPerMTok?: number;
   notes?: string;
 }
 
@@ -62,6 +65,8 @@ export const LLM_MODEL_CATALOG: LlmModel[] = [
     providerId: "claude",
     label: "Claude Opus 4.8",
     contextWindow: 200_000,
+    priceInPerMTok: 15,
+    priceOutPerMTok: 75,
     notes: "최고 성능 — 복잡한 추론·민감 민원 처리",
   },
   {
@@ -70,6 +75,8 @@ export const LLM_MODEL_CATALOG: LlmModel[] = [
     label: "Claude Sonnet 4.6",
     contextWindow: 200_000,
     recommended: true,
+    priceInPerMTok: 3,
+    priceOutPerMTok: 15,
     notes: "성능·비용 균형 — 대부분의 공공기관 챗봇 기본값",
   },
   {
@@ -77,6 +84,8 @@ export const LLM_MODEL_CATALOG: LlmModel[] = [
     providerId: "claude",
     label: "Claude Haiku 4.5",
     contextWindow: 200_000,
+    priceInPerMTok: 0.8,
+    priceOutPerMTok: 4,
     notes: "빠르고 저렴 — 단순 FAQ·고트래픽",
   },
   // OpenAI
@@ -85,6 +94,8 @@ export const LLM_MODEL_CATALOG: LlmModel[] = [
     providerId: "openai",
     label: "GPT-4o",
     contextWindow: 128_000,
+    priceInPerMTok: 2.5,
+    priceOutPerMTok: 10,
     notes: "범용 — 해외 클라우드, 데이터 국내보관 요건 시 검토",
   },
   {
@@ -92,6 +103,8 @@ export const LLM_MODEL_CATALOG: LlmModel[] = [
     providerId: "openai",
     label: "GPT-4o mini",
     contextWindow: 128_000,
+    priceInPerMTok: 0.15,
+    priceOutPerMTok: 0.6,
     notes: "경량·저비용",
   },
   // 오픈소스 / 온프레미스 (국산 포함)
