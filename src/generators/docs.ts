@@ -127,6 +127,9 @@ export function renderPromptMd(spec: AgentSpec): string {
   interactionExtra.push(
     `응답 ${it.streaming.enabled ? `스트리밍(속도 ${it.streaming.speed}, 인디케이터 ${it.streaming.indicator})` : "비스트리밍"}, 렌더링: 마크다운 ${yesno(it.rendering.markdown)}·인용 "${it.rendering.citationStyle}".`,
   );
+  interactionExtra.push(
+    `출력 형식: 길이 "${it.output.length}"·구조 "${it.output.structured}"${it.rendering.showContextMeter ? ", 컨텍스트 사용량 미터 표시" : ""}.`,
+  );
   if (it.multimodal.length) {
     interactionExtra.push(`멀티모달: ${it.multimodal.join(", ")} (접근성 연계).`);
   }
@@ -135,6 +138,20 @@ export function renderPromptMd(spec: AgentSpec): string {
       it.controls.join(", ") || "(없음)"
     }${it.controls.includes("feedback") ? ` (피드백 ${it.feedback})` : ""}.`,
   );
+
+  // 에이전트 능력
+  const ag = spec.agent;
+  const caps: string[] = [];
+  if (ag.askUser) caps.push("정보 부족 시 사용자에게 명확화 질문(AskUser)");
+  if (ag.subAgents.enabled)
+    caps.push(`서브에이전트${ag.subAgents.maxParallel ? `(최대 ${ag.subAgents.maxParallel} 병렬)` : ""}`);
+  if (ag.builtinTools.length) caps.push(`내장 도구: ${ag.builtinTools.join(", ")}`);
+  if (ag.memory.longTerm) caps.push("장기 기억(세션 간 벡터 기억)");
+  if (ag.context.autoCompact) caps.push(`컨텍스트 자동 압축(${ag.context.strategy}${ag.context.budgetTokens ? `, ${ag.context.budgetTokens} 토큰` : ""})`);
+  steps.push(
+    `${n++}. **에이전트 능력/안전 구현**: ${caps.length ? caps.join("; ") + ". " : ""}안전 — 거절 스타일 "${ag.safety.refusalStyle}"${ag.safety.rateLimitPerMin ? `, 분당 ${ag.safety.rateLimitPerMin}회 제한` : ""}${ag.safety.abuseFilter ? ", 남용 필터 적용" : ""}. (§7 가드레일과 함께 적용)`,
+  );
+
   steps.push(
     `${n++}. **평가 골든셋 검증**: 동봉된 테스트 골격(\`tests/\`)을 실행해 \`evaluation\` 골든셋을 통과시킨다. 통과 못 하면 RAG/프롬프트를 조정한다.`,
   );

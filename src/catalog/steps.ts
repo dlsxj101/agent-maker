@@ -60,6 +60,11 @@ export const WIZARD_STEPS: WizardStep[] = [
     summary: "에이전트 동작(챗봇/도구호출), 스트리밍·타이핑, 메시지 렌더링, 멀티모달 (라이브 프리뷰)",
   },
   {
+    id: "agent",
+    title: "에이전트 능력 & 컨텍스트",
+    summary: "서브에이전트, 명확화 질문, 내장 도구, 장기 기억, 컨텍스트 자동압축·사용량 미터, 안전(거절/남용)",
+  },
+  {
     id: "integrations",
     title: "연동 & API",
     summary: "외부/내부 API, 도구 사용(tool use), 웹훅",

@@ -14,6 +14,7 @@ import { RagStep } from "./steps/RagStep";
 import { LlmStep } from "./steps/LlmStep";
 import { ConversationStep } from "./steps/ConversationStep";
 import { InteractionStep } from "./steps/InteractionStep";
+import { AgentStep } from "./steps/AgentStep";
 import { IntegrationsStep } from "./steps/IntegrationsStep";
 import { EvaluationStep } from "./steps/EvaluationStep";
 import { ComplianceStep } from "./steps/ComplianceStep";
@@ -29,6 +30,7 @@ const REGISTRY: Record<string, React.ComponentType> = {
   llm: LlmStep,
   conversation: ConversationStep,
   interaction: InteractionStep,
+  agent: AgentStep,
   integrations: IntegrationsStep,
   evaluation: EvaluationStep,
   compliance: ComplianceStep,

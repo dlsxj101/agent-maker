@@ -115,9 +115,22 @@ export const STREAM_SPEEDS = ["slow", "normal", "fast", "instant"] as const;
 export const TYPING_INDICATORS = ["dots", "cursor", "none"] as const;
 export const CITATION_STYLES = ["none", "inline", "footnote", "chips"] as const;
 export const TOOLCALL_DISPLAYS = ["hidden", "collapsed", "expanded"] as const;
-export const CHAT_CONTROLS = ["stop", "regenerate", "copy", "feedback"] as const;
+export const CHAT_CONTROLS = ["stop", "regenerate", "copy", "feedback", "clear", "export"] as const;
 export const FEEDBACK_STYLES = ["none", "thumbs", "rating"] as const;
 export const MODALITIES = ["image-input", "file-upload", "voice-input", "voice-output"] as const;
+export const OUTPUT_LENGTHS = ["brief", "balanced", "detailed"] as const;
+export const STRUCTURED_OUTPUTS = ["none", "sections", "table", "json"] as const;
+
+// §10 agent — 에이전트 능력 & 컨텍스트 & 안전
+export const BUILTIN_TOOLS = [
+  "web-search",
+  "code-interpreter",
+  "calculator",
+  "file-reader",
+  "image-gen",
+] as const;
+export const CONTEXT_STRATEGIES = ["none", "summarize", "truncate", "sliding-window"] as const;
+export const REFUSAL_STYLES = ["polite", "brief", "redirect", "strict"] as const;
 
 export const API_AUTH_MODES = ["none", "api-key", "oauth", "gpki"] as const;
 export const WEBHOOK_CHANNELS = ["email", "sms", "none"] as const;
@@ -401,6 +414,13 @@ const InteractionSchema = z
         codeBlocks: z.boolean().default(true),
         citationStyle: z.enum(CITATION_STYLES).default("chips"),
         toolCallDisplay: z.enum(TOOLCALL_DISPLAYS).default("collapsed"),
+        showContextMeter: z.boolean().default(false), // 컨텍스트 사용량 화면 표시
+      })
+      .prefault({}),
+    output: z
+      .object({
+        length: z.enum(OUTPUT_LENGTHS).default("balanced"), // 답변 길이 성향
+        structured: z.enum(STRUCTURED_OUTPUTS).default("none"), // 구조화 출력
       })
       .prefault({}),
     welcome: z
@@ -416,7 +436,49 @@ const InteractionSchema = z
   .prefault({});
 
 /* -------------------------------------------------------------------------- */
-/* §10 integrations — 연동 & API                                               */
+/* §10 agent — 에이전트 능력 & 컨텍스트 & 안전                                  */
+/* -------------------------------------------------------------------------- */
+
+const AgentSchema = z
+  .object({
+    // 명확화 질문: 정보가 부족하면 사용자에게 되묻기 (AskUserQuestion식)
+    askUser: z.boolean().default(false),
+    // 서브에이전트: 하위 작업을 분담하는 보조 에이전트
+    subAgents: z
+      .object({
+        enabled: z.boolean().default(false),
+        maxParallel: z.number().optional(),
+      })
+      .prefault({}),
+    // 내장 도구 (integrations.tools = 커스텀 API, 이건 일반 능력 도구)
+    builtinTools: z.array(z.enum(BUILTIN_TOOLS)).default([]),
+    // 장기 기억: 세션을 넘어 사용자/지식을 벡터로 기억
+    memory: z
+      .object({
+        longTerm: z.boolean().default(false),
+      })
+      .prefault({}),
+    // 컨텍스트 관리: 윈도가 찰 때 자동 압축
+    context: z
+      .object({
+        autoCompact: z.boolean().default(false),
+        strategy: z.enum(CONTEXT_STRATEGIES).default("none"),
+        budgetTokens: z.number().optional(), // 압축 트리거 토큰 예산
+      })
+      .prefault({}),
+    // 안전 (§7 llm.guardrails 보완)
+    safety: z
+      .object({
+        refusalStyle: z.enum(REFUSAL_STYLES).default("polite"),
+        rateLimitPerMin: z.number().optional(), // 대화 단위 분당 요청 상한
+        abuseFilter: z.boolean().default(false), // 남용/욕설/도배 필터
+      })
+      .prefault({}),
+  })
+  .prefault({});
+
+/* -------------------------------------------------------------------------- */
+/* §11 integrations — 연동 & API                                               */
 /* -------------------------------------------------------------------------- */
 
 const IntegrationsSchema = z
@@ -443,7 +505,7 @@ const IntegrationsSchema = z
   .prefault({});
 
 /* -------------------------------------------------------------------------- */
-/* §11 evaluation — 평가 & 테스트 (납품 품질 보증)                             */
+/* §12 evaluation — 평가 & 테스트 (납품 품질 보증)                             */
 /* -------------------------------------------------------------------------- */
 
 const EvaluationSchema = z
@@ -468,7 +530,7 @@ const EvaluationSchema = z
   .prefault({});
 
 /* -------------------------------------------------------------------------- */
-/* §12 compliance — 컴플라이언스 (공공기관 필수)                               */
+/* §13 compliance — 컴플라이언스 (공공기관 필수)                               */
 /* -------------------------------------------------------------------------- */
 
 const ComplianceSchema = z
@@ -505,7 +567,7 @@ const ComplianceSchema = z
   .prefault({});
 
 /* -------------------------------------------------------------------------- */
-/* §13 ops — 운영 · 관측 (compliance에서 분리)                                 */
+/* §14 ops — 운영 · 관측 (compliance에서 분리)                                 */
 /* -------------------------------------------------------------------------- */
 
 const OpsSchema = z
@@ -547,10 +609,11 @@ export const AgentSpecSchema = z.object({
   llm: LlmSchema, // §7
   conversation: ConversationSchema, // §8
   interaction: InteractionSchema, // §9
-  integrations: IntegrationsSchema, // §10
-  evaluation: EvaluationSchema, // §11
-  compliance: ComplianceSchema, // §12
-  ops: OpsSchema, // §13
+  agent: AgentSchema, // §10
+  integrations: IntegrationsSchema, // §11
+  evaluation: EvaluationSchema, // §12
+  compliance: ComplianceSchema, // §13
+  ops: OpsSchema, // §14
 });
 
 /** 마법사 전역 상태로 쓰이는 설정 타입 */

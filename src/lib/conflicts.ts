@@ -154,5 +154,26 @@ export function detectConflicts(spec: AgentSpec): Conflict[] {
     });
   }
 
+  // C13: 폐쇄망인데 외부망이 필요한 내장 도구 활성
+  if (spec.backend.network === "offline") {
+    const net = spec.agent.builtinTools.filter((t) => t === "web-search" || t === "image-gen");
+    if (net.length > 0) {
+      out.push({
+        id: "C13",
+        section: "agent",
+        message: `폐쇄망 환경인데 외부망이 필요한 도구(${net.join(", ")})가 켜져 있습니다. 온프레미스 대안을 쓰거나 비활성화하세요.`,
+      });
+    }
+  }
+
+  // C14: 자동 압축을 켰는데 전략이 없음
+  if (spec.agent.context.autoCompact && spec.agent.context.strategy === "none") {
+    out.push({
+      id: "C14",
+      section: "agent",
+      message: "컨텍스트 자동 압축이 켜져 있지만 압축 전략이 '압축 안 함'입니다. 전략(요약/절단/슬라이딩)을 선택하세요.",
+    });
+  }
+
   return out;
 }

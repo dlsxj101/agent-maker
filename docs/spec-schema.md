@@ -281,12 +281,17 @@ interaction: {
     codeBlocks: boolean
     citationStyle: enum{ none | inline | footnote | chips }   # 인용 표시 방식
     toolCallDisplay: enum{ hidden | collapsed | expanded }    # 도구호출 표시
+    showContextMeter: boolean          # 컨텍스트 사용량 화면 표시
+  }
+  output: {
+    length: enum{ brief | balanced | detailed }   # 답변 길이 성향
+    structured: enum{ none | sections | table | json }   # 구조화 출력
   }
   welcome: {
     greeting?: string                  # 인사말
     showSuggestions: boolean           # 추천 질문(quickReplies) 노출
   }
-  controls: enum[]{ stop | regenerate | copy | feedback }     # 대화 컨트롤
+  controls: enum[]{ stop | regenerate | copy | feedback | clear | export }   # 대화 컨트롤
   feedback: enum{ none | thumbs | rating }                    # 피드백 방식
   multimodal: enum[]{ image-input | file-upload | voice-input | voice-output }
 }
@@ -296,7 +301,43 @@ interaction: {
 
 ---
 
-## 10. `integrations` — 연동 & API
+## 10. `agent` — 에이전트 능력 & 컨텍스트 & 안전 (신규)
+
+> "무엇을 할 수 있나". §7 llm(추론 엔진)·§9 interaction(UX) 과 별개로 **에이전트의 능력·컨텍스트 관리·안전**.
+> 모든 필드 기본값 있음(필수 없음). 안전은 §7 `llm.guardrails`(groundedOnly·piiFilter·bannedTopics)를 보완.
+
+```
+agent: {
+  askUser: boolean                     # 명확화 질문(정보 부족 시 되묻기, AskUserQuestion식)
+  subAgents: {
+    enabled: boolean                   # 하위 작업 분담 보조 에이전트
+    maxParallel?: number
+  }
+  builtinTools: enum[]{                # 일반 능력 도구 (커스텀 API 는 §11 integrations.tools)
+    web-search | code-interpreter | calculator | file-reader | image-gen
+  }
+  memory: {
+    longTerm: boolean                  # 세션을 넘는 벡터 기억
+  }
+  context: {
+    autoCompact: boolean               # 윈도가 찰 때 자동 압축
+    strategy: enum{ none | summarize | truncate | sliding-window }
+    budgetTokens?: number              # 압축 트리거 토큰 예산
+  }
+  safety: {
+    refusalStyle: enum{ polite | brief | redirect | strict }   # 거절 방식
+    rateLimitPerMin?: number           # 대화 단위 분당 요청 상한(남용 방지)
+    abuseFilter: boolean               # 욕설/도배 등 남용 필터
+  }
+}
+```
+
+> ⚠️ 폐쇄망(`backend.network=airgap`) + 외부망 도구(`web-search`/`image-gen`) → 충돌(C13).
+> ⚠️ `context.autoCompact=true` 인데 `strategy=none` → 충돌(C14).
+
+---
+
+## 11. `integrations` — 연동 & API
 
 ```
 integrations: {
@@ -315,7 +356,7 @@ integrations: {
 
 ---
 
-## 11. `evaluation` — 평가 & 테스트 (납품 품질 보증)
+## 12. `evaluation` — 평가 & 테스트 (납품 품질 보증)
 
 > "한 방에" 만든 결과의 품질을 잴 수 없으면 공공기관 납품 리스크. 산출물에 테스트셋·E2E 테스트
 > 골격을 포함해 생성될 챗봇이 자체 검증할 수 있게 한다. (PLAN.md §4 Step 9)
@@ -342,7 +383,7 @@ evaluation: {
 
 ---
 
-## 12. `compliance` — 컴플라이언스 (공공기관 필수)
+## 13. `compliance` — 컴플라이언스 (공공기관 필수)
 
 ```
 compliance: {
@@ -371,7 +412,7 @@ compliance: {
 
 ---
 
-## 13. `ops` — 운영 · 관측 (compliance에서 분리)
+## 14. `ops` — 운영 · 관측 (compliance에서 분리)
 
 ```
 ops: {
@@ -411,6 +452,8 @@ ops: {
 | C10 | `compliance.procurement.offlineInstaller=true` + 클라우드 의존(LLM/임베딩/DB) | 온프레미스 구성으로 변경 제안 |
 | C11 | `project.languages=multi` + `conversation.i18n` 미설정 | 언어별 응답/지식소스 정책 권고 |
 | C12 | `interaction.agentMode=tool-agent` + `integrations.tools` 비어 있음 | 호출할 도구 정의 권고(빈 에이전트 방지) |
+| C13 | `backend.network=airgap` + `agent.builtinTools` 에 web-search/image-gen | 외부망 도구 비활성 또는 온프레미스 대안 권고 |
+| C14 | `agent.context.autoCompact=true` + `strategy=none` | 압축 전략 선택 권고 |
 
 ### Export 차단 게이트 (검토 반영)
 

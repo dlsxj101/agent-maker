@@ -82,6 +82,19 @@ describe("detectConflicts", () => {
     expect(ids(spec)).toContain("C12");
   });
 
+  it("폐쇄망 + 웹검색 내장 도구면 C13", () => {
+    const spec = createDraftSpec({
+      backend: { network: "offline" },
+      agent: { builtinTools: ["web-search"] },
+    });
+    expect(ids(spec)).toContain("C13");
+  });
+
+  it("자동압축 켜고 전략 none 이면 C14", () => {
+    const spec = createDraftSpec({ agent: { context: { autoCompact: true, strategy: "none" } } });
+    expect(ids(spec)).toContain("C14");
+  });
+
   it("오프라인 설치 패키지 + 공식 API LLM 이면 C10", () => {
     const spec = createDraftSpec({
       llm: { serving: "official-api" },

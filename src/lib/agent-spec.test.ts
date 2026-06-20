@@ -34,6 +34,7 @@ describe("AgentSpec 기본값", () => {
         "llm",
         "conversation",
         "interaction",
+        "agent",
         "integrations",
         "evaluation",
         "compliance",

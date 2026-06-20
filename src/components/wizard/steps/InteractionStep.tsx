@@ -16,6 +16,8 @@ import {
   FEEDBACK_STYLES,
   MODALITIES,
   AGENT_MODES,
+  OUTPUT_LENGTHS,
+  STRUCTURED_OUTPUTS,
 } from "@/lib/agent-spec";
 import { SelectField, ToggleField, NumberField, ChipMulti, TextField } from "../controls";
 import { InteractionPreview } from "../InteractionPreview";
@@ -130,6 +132,27 @@ export function InteractionStep() {
           label="코드블록"
           checked={it.rendering.codeBlocks}
           onChange={(v) => update("interaction", { rendering: { ...it.rendering, codeBlocks: v } })}
+        />
+        <ToggleField
+          label="컨텍스트 사용량 미터 표시"
+          checked={it.rendering.showContextMeter}
+          onChange={(v) => update("interaction", { rendering: { ...it.rendering, showContextMeter: v } })}
+        />
+      </fieldset>
+
+      {/* 출력 형식 */}
+      <fieldset className="grid grid-cols-2 gap-3">
+        <SelectField
+          label="답변 길이"
+          value={it.output.length}
+          onChange={(v) => update("interaction", { output: { ...it.output, length: v as (typeof OUTPUT_LENGTHS)[number] } })}
+          options={opts(OUTPUT_LENGTHS, L.length)}
+        />
+        <SelectField
+          label="구조화 출력"
+          value={it.output.structured}
+          onChange={(v) => update("interaction", { output: { ...it.output, structured: v as (typeof STRUCTURED_OUTPUTS)[number] } })}
+          options={opts(STRUCTURED_OUTPUTS, L.structured)}
         />
       </fieldset>
 

@@ -88,6 +88,7 @@ export function InteractionPreview() {
   }, [run, it.agentMode, it.streaming.enabled, it.streaming.speed, it.rendering.toolCallDisplay, it.rendering.citationStyle]);
 
   const answerText = ANSWER.slice(0, typed);
+  const ctxPct = Math.min(96, 18 + trace * 12 + Math.round((typed / ANSWER.length) * 26));
   const cursor = it.streaming.indicator === "cursor" && phase === "answer" && typed < ANSWER.length;
   const dots = it.streaming.indicator === "dots" && phase === "thinking";
 
@@ -200,6 +201,25 @@ export function InteractionPreview() {
             {it.multimodal.includes("file-upload") && <Chip>📎 파일</Chip>}
             {it.multimodal.includes("voice-input") && <Chip>🎙 음성입력</Chip>}
             {it.multimodal.includes("voice-output") && <Chip>🔊 음성출력</Chip>}
+          </div>
+        )}
+
+        {/* 컨텍스트 사용량 미터 */}
+        {it.rendering.showContextMeter && (
+          <div className="border-t border-hairline pt-2.5">
+            <div className="mono mb-1 flex justify-between text-[10px] text-muted">
+              <span>컨텍스트 사용량</span>
+              <span>{ctxPct}%</span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+              <div
+                className="h-full rounded-full transition-[width] duration-200"
+                style={{
+                  width: `${ctxPct}%`,
+                  background: ctxPct > 85 ? "#dc2626" : colors.accent,
+                }}
+              />
+            </div>
           </div>
         )}
       </div>

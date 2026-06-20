@@ -50,8 +50,17 @@ export const INTERACTION_LABELS = {
   indicator: { dots: "점 애니메이션", cursor: "커서 깜빡임", none: "없음" },
   citationStyle: { none: "표시 안 함", inline: "인라인", footnote: "각주", chips: "출처 칩" },
   toolCallDisplay: { hidden: "숨김", collapsed: "접힘(펼치기 가능)", expanded: "펼침" },
-  controls: { stop: "중지", regenerate: "재생성", copy: "복사", feedback: "피드백" },
+  controls: {
+    stop: "중지",
+    regenerate: "재생성",
+    copy: "복사",
+    feedback: "피드백",
+    clear: "대화 초기화",
+    export: "대화 내보내기",
+  },
   feedback: { none: "없음", thumbs: "좋아요/싫어요", rating: "별점" },
+  length: { brief: "간결", balanced: "균형", detailed: "상세" },
+  structured: { none: "자유 형식", sections: "섹션 구조", table: "표 위주", json: "JSON" },
   multimodal: {
     "image-input": "이미지 입력",
     "file-upload": "파일 업로드",

@@ -91,6 +91,22 @@ describe("공공기관 제약 반영 (제품 핵심 보장)", () => {
     expect(m["src/chat.ts"]).toContain("도구호출 에이전트");
   });
 
+  it("에이전트 능력(서브에이전트·내장도구·자동압축)이 PROMPT 에 반영된다", () => {
+    const agent = {
+      ...cloudSpec,
+      agent: {
+        ...cloudSpec.agent,
+        subAgents: { enabled: true, maxParallel: 3 },
+        builtinTools: ["web-search" as const, "calculator" as const],
+        context: { autoCompact: true, strategy: "summarize" as const },
+      },
+    };
+    const m = fileMap(generateArtifacts(agent, { now: FIXED_NOW }));
+    expect(m["PROMPT.md"]).toContain("서브에이전트");
+    expect(m["PROMPT.md"]).toContain("web-search");
+    expect(m["PROMPT.md"]).toContain("자동 압축");
+  });
+
   it("디자인 토큰이 styles.css 에 CSS 변수로 들어간다", () => {
     const css = fileMap(generateArtifacts(cloudSpec, { now: FIXED_NOW }))["public/styles.css"];
     expect(css).toContain("--color-primary: #1F4E8C");

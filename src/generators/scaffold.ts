@@ -152,6 +152,17 @@ function maskPii(text: string): string {
   return `// 채팅 오케스트레이션 골격: (RAG 검색) → LLM 호출.
 ${agentLoopNote}// 응답 스트리밍: ${it.streaming.enabled ? `사용(속도 ${it.streaming.speed}, 인디케이터 ${it.streaming.indicator}) — SSE 또는 ReadableStream 으로 토큰 전송` : "미사용"}.
 // 렌더링: 마크다운 ${it.rendering.markdown} · 인용 "${it.rendering.citationStyle}" · 도구호출 "${it.rendering.toolCallDisplay}".
+// 출력: 길이 "${it.output.length}" · 구조 "${it.output.structured}"${it.rendering.showContextMeter ? " · 컨텍스트 사용량 미터 노출" : ""}.
+// 에이전트 능력: ${[
+    spec.agent.askUser && "명확화 질문",
+    spec.agent.subAgents.enabled && "서브에이전트",
+    spec.agent.memory.longTerm && "장기 기억",
+    spec.agent.builtinTools.length && `내장도구(${spec.agent.builtinTools.join("/")})`,
+  ]
+    .filter(Boolean)
+    .join(" · ") || "(없음)"}.
+// 컨텍스트: ${spec.agent.context.autoCompact ? `자동압축 ${spec.agent.context.strategy}${spec.agent.context.budgetTokens ? ` @${spec.agent.context.budgetTokens}tok` : ""}` : "압축 안 함"}.
+// 안전: 거절 "${spec.agent.safety.refusalStyle}"${spec.agent.safety.rateLimitPerMin ? ` · ${spec.agent.safety.rateLimitPerMin}/min` : ""}${spec.agent.safety.abuseFilter ? " · 남용필터" : ""}.
 ${ragImport}import { complete } from "./llm/client.js";
 
 const GROUNDED_ONLY = ${spec.llm.guardrails.groundedOnly}; // 근거 기반 답변 강제
