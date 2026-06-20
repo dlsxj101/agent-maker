@@ -47,7 +47,12 @@ export const WIZARD_STEPS: WizardStep[] = [
   {
     id: "llm",
     title: "LLM (생성 모델)",
-    summary: "Claude / 오픈소스(온프레미스), 호출 방식, 가드레일",
+    summary: "Claude / 오픈소스(온프레미스), 호출 방식, 가드레일, 멀티턴/세션",
+  },
+  {
+    id: "conversation",
+    title: "대화 설계",
+    summary: "페르소나/톤, 인텐트·시나리오, 빠른 응답, 폴백/상담사 연결",
   },
   {
     id: "integrations",
@@ -55,8 +60,18 @@ export const WIZARD_STEPS: WizardStep[] = [
     summary: "외부/내부 API, 도구 사용(tool use), 웹훅",
   },
   {
+    id: "evaluation",
+    title: "평가 & 테스트",
+    summary: "골든 질의셋, 평가 지표(인용 적중 등), 합격선",
+  },
+  {
     id: "compliance",
-    title: "컴플라이언스 & 운영",
-    summary: "개인정보, 보안, 접근성, 감사 로그, 운영",
+    title: "컴플라이언스",
+    summary: "개인정보, 보안, 접근성(KWCAG), 조달/라이선스/인증",
+  },
+  {
+    id: "ops",
+    title: "운영 · 관측 · 비용",
+    summary: "감사 로그, 관측(토큰·지연), 성능/SLA, 비용 추정",
   },
 ];

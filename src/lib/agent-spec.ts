@@ -25,15 +25,19 @@ export const AgentSpecSchema = z.object({
     generatorVersion: z.string().default("0.1.0"),
     createdAt: z.string().optional(), // 직렬화 시점에 기록
   }),
+  // 섹션 번호는 docs/spec-schema.md와 일치한다.
   project: placeholderSection, // §1
   design: placeholderSection, // §2
   frontend: placeholderSection, // §3
-  backend: placeholderSection, // §4
+  backend: placeholderSection, // §4 (+ sla)
   database: placeholderSection, // §5
   rag: placeholderSection, // §6
-  llm: placeholderSection, // §7
-  integrations: placeholderSection, // §8
-  compliance: placeholderSection, // §9
+  llm: placeholderSection, // §7 (+ session, budget)
+  conversation: placeholderSection, // §8  대화 설계 (신규)
+  integrations: placeholderSection, // §9
+  evaluation: placeholderSection, // §10 평가/테스트 (신규)
+  compliance: placeholderSection, // §11
+  ops: placeholderSection, // §12 운영·관측 (신규, compliance에서 분리)
 });
 
 /** 마법사 전역 상태로 쓰이는 설정 타입 */
