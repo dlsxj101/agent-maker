@@ -280,12 +280,14 @@ AgentSpec {
   - **기본값/필수 2단 설계**: 스키마는 전 필드 기본값 부여(`parse({})` → 완전한 초안 생성, 마법사 초기상태·localStorage·round-trip 용이). "필수 필드가 비어 있으면 export 차단"하는 게이트는 별도 준비도 검사로 **M5 Review에서** 구현(`createDraftSpec`/`serializeSpec`/`deserializeSpec` 헬퍼 제공).
   - Zod 4 메모: 중첩 객체 기본값은 `.default({})`(원시 `{}` 반환, 내부 기본값 미적용)가 아니라 **`.prefault({})`**(기본값을 스키마로 파싱)를 써야 내부 기본값이 재귀 적용된다.
 
-- **M2 — 산출물 생성기 + E2E 검증 (★수직 슬라이스의 핵심, 앞당김)**
-  - 0번 작업: **ZIP 라이브러리 확정**(fflate vs jszip)
-  - 손으로 쓴 샘플 `AgentSpec` 픽스처 → 생성기 → 문서 + **스캐폴딩 코드** + ZIP
-  - 골든 산출물 **스냅샷 테스트**
-  - **E2E 검증(게이트):** ZIP을 빈 폴더에 풀어 **실제 Claude Code로 챗봇 1개를 구현**해 보고,
-    빌드/기동 성공을 합격 기준으로. 실패 시 PROMPT/스키마/템플릿으로 피드백. *제품 가치를 먼저 증명.*
+- **M2 — 산출물 생성기 + E2E 검증 (★수직 슬라이스의 핵심)** 🔄 *(생성기·ZIP·스냅샷·기계적 기동 검증 완료 / 에이전트 E2E 게이트 남음)*
+  - ✅ 0번 작업: **ZIP 라이브러리 = fflate** 확정 (`src/generators/index.ts`, `bundleToZip`/`bundleToZipBytes`)
+  - ✅ 손으로 쓴 샘플 `AgentSpec` 픽스처(cloud/airgap, `src/generators/fixtures.ts`) → 생성기 → 문서 6종 + **스캐폴딩 코드**(Node/TS 백엔드 + 토큰 적용 채팅 UI + RAG/LLM 골격 + 평가 테스트) + ZIP
+    - 생성기 모듈: `format.ts`(한글 라벨) · `tokens.ts`(디자인 토큰/CSS 변수) · `docs.ts`(PROMPT/DESIGN/CLAUDE/ARCHITECTURE/README) · `scaffold.ts` · `index.ts`(오케스트레이터)
+  - ✅ 골든 산출물 **스냅샷 테스트** + 결정성/제약반영/ZIP round-trip 테스트 (`generators.test.ts`, 22 케이스 통과)
+  - ✅ **기계적 기동 검증**: 생성 ZIP 해제 → `npm install` → `tsc` 빌드 → 서버 기동 → `/health` 200 확인.
+    (스캐폴드가 컴파일/기동되는 최소 골격임을 증명. LLM 클라이언트는 지연 초기화 → 키 없이도 `/health` 기동.)
+  - 🔄 **에이전트 E2E 게이트 (남음):** ZIP을 빈 폴더에 풀어 **실제 Claude Code로 챗봇 1개를 끝까지 구현**(비즈니스 로직 채우기)해 보는 `export-verify` 게이트. 실패 시 PROMPT/스키마/템플릿으로 피드백.
 
 - **M3 — 마법사 셸 & 상태**
   - 0번 작업: **상태관리 라이브러리 확정**(Zustand vs Context+reducer)
@@ -321,7 +323,7 @@ AgentSpec {
 - ✅ **테스트 러너 = Vitest** (M1에서 도입). TS·`@/*` 경로 별칭·스냅샷(M2 골든 산출물) 지원. `npm test` → `vitest run`. 설정은 `vitest.config.ts`.
 
 **마일스톤에 결정 시점이 묶인 항목** (해당 M의 0번 작업으로 확정):
-- ZIP 라이브러리 (fflate vs jszip) → **M2 0번 작업**
+- ✅ ZIP 라이브러리 = **fflate** 확정 (M2). 근거: 의존성 0·번들 매우 작음·빠름·트리셰이킹(클라이언트/폐쇄망 친화). `bundleToZip`에 격리되어 교체 용이.
 - 상태 관리 라이브러리 (Zustand vs Context+reducer) → **M3 0번 작업**
 - UI 라이브러리 (shadcn/ui vs Radix) → **M4 0번 작업**
 
