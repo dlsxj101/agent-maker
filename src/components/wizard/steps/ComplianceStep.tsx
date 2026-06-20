@@ -3,7 +3,14 @@
 import { useWizardStore } from "@/lib/store";
 import { COMPLIANCE_A11Y, CERTIFICATIONS } from "@/lib/agent-spec";
 import { label } from "@/generators/format";
-import { SelectField, ToggleField, NumberField, StringListField, ChipMulti, Field } from "../controls";
+import { OptionCards, ToggleField, NumberField, StringListField, ChipMulti, Field } from "../controls";
+
+const A11Y_DESC: Record<string, string> = {
+  none: "접근성 목표 미설정 (권장하지 않음)",
+  "kwcag-a": "최소 수준 — 필수 항목만 충족",
+  "kwcag-aa": "공공기관 표준 권고 수준 (기본)",
+  "kwcag-aaa": "최고 수준 — 강화된 대비·보조기술 지원",
+};
 
 export function ComplianceStep() {
   const c = useWizardStore((s) => s.spec.compliance);
@@ -59,11 +66,16 @@ export function ComplianceStep() {
         </div>
       </Field>
 
-      <SelectField
+      <OptionCards
         label="접근성 (KWCAG)"
+        columns={4}
         value={c.a11y}
         onChange={(v) => update("compliance", { a11y: v as (typeof COMPLIANCE_A11Y)[number] })}
-        options={COMPLIANCE_A11Y.map((a) => [a, label("a11yLevel", a)])}
+        options={COMPLIANCE_A11Y.map((a) => ({
+          id: a,
+          label: label("a11yLevel", a),
+          description: A11Y_DESC[a],
+        }))}
         hint="프론트엔드 접근성 등급과 일치시키세요."
       />
 

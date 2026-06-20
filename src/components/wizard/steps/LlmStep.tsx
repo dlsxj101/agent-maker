@@ -7,8 +7,14 @@
 import { useWizardStore } from "@/lib/store";
 import { LLM_PROVIDER_CATALOG, modelsByProvider } from "@/catalog";
 import { LLM_PROVIDERS, LLM_SERVINGS } from "@/lib/agent-spec";
-import { label } from "@/generators/format";
-import { SelectField, NumberField, ToggleField } from "../controls";
+import { OptionCards, NumberField, ToggleField } from "../controls";
+
+/** 호출 방식(serving) 별 한국어 설명 */
+const SERVING_DESCRIPTIONS: Record<(typeof LLM_SERVINGS)[number], string> = {
+  "official-api": "공식 클라우드 API — 인터넷 연결 필요",
+  proxy: "프록시 서버 경유 — 내부망→인터넷 중계",
+  "self-hosted": "사내 추론 서버(vLLM/Ollama/TGI) — 폐쇄망 권장",
+};
 
 export function LlmStep() {
   const llm = useWizardStore((s) => s.spec.llm);
@@ -45,17 +51,36 @@ export function LlmStep() {
         </div>
       </div>
 
-      <SelectField
+      {/* 모델 선택 — 제공자별 필터링된 목록을 카드로 표시 */}
+      <OptionCards
         label="모델"
         value={llm.model}
         onChange={(v) => update("llm", { model: v })}
-        options={models.map((m) => [m.id, `${m.label}${m.recommended ? " (권장)" : ""}${m.domestic ? " · 국산" : ""}`])}
+        options={models.map((m) => ({
+          id: m.id,
+          label: m.label,
+          description: m.notes,
+          preview:
+            m.recommended || m.domestic ? (
+              <span className="flex gap-1 text-xs">
+                {m.recommended && <span>⭐ 권장</span>}
+                {m.domestic && <span>🇰🇷 국산</span>}
+              </span>
+            ) : undefined,
+        }))}
+        columns={2}
       />
-      <SelectField
+      {/* 호출 방식 선택 — 폐쇄망 여부에 따라 self-hosted 권장 */}
+      <OptionCards
         label="호출 방식"
         value={llm.serving}
         onChange={(v) => update("llm", { serving: v as (typeof LLM_SERVINGS)[number] })}
-        options={LLM_SERVINGS.map((s) => [s, label("serving", s)])}
+        options={LLM_SERVINGS.map((s) => ({
+          id: s,
+          label: s === "official-api" ? "공식 API" : s === "proxy" ? "프록시 경유" : "사내 추론 서버",
+          description: SERVING_DESCRIPTIONS[s],
+        }))}
+        columns={3}
         hint="폐쇄망이면 self-hosted(사내 추론)를 권장합니다."
       />
 

@@ -23,7 +23,7 @@ import {
   VOICE_TTS_ENGINES,
   A11Y_USER_CONTROLS,
 } from "@/lib/agent-spec";
-import { SelectField, ToggleField, NumberField, ChipMulti, TextField, OptionCards } from "../controls";
+import { ToggleField, NumberField, ChipMulti, TextField, OptionCards } from "../controls";
 import { InteractionPreview } from "../InteractionPreview";
 
 const L = INTERACTION_LABELS;
@@ -43,6 +43,22 @@ const A11Y_LABELS: Record<string, string> = {
   "high-contrast": "고대비 모드",
   "screen-reader-hints": "스크린리더 힌트",
 };
+const TOOLPOLICY_DESC: Record<string, string> = { none: "도구 미사용", auto: "자동 실행(빠름)", confirm: "실행 전 사람 승인(HITL)" };
+const SPEED_DESC: Record<string, string> = { slow: "또박또박", normal: "표준 속도", fast: "빠르게", instant: "즉시(스트리밍 없음)" };
+const TOOLCALL_DESC: Record<string, string> = { hidden: "사용자에게 숨김", collapsed: "접어서 표시(펼치기 가능)", expanded: "항상 펼쳐 표시" };
+const LENGTH_DESC: Record<string, string> = { brief: "핵심만 짧게", balanced: "적정 분량", detailed: "근거까지 상세히" };
+const VOICE_LOCAL: string[] = ["browser", "whisper-local", "coqui-local"];
+const voiceOpts = <T extends string>(arr: readonly T[]) =>
+  arr.map((id) => ({
+    id,
+    label: VOICE_LABELS[id] ?? id,
+    preview:
+      id === "none" ? undefined : (
+        <span className={`text-[10px] ${VOICE_LOCAL.includes(id) ? "text-primary" : "text-muted"}`}>
+          {VOICE_LOCAL.includes(id) ? "온프레미스" : "클라우드"}
+        </span>
+      ),
+  }));
 
 export function InteractionStep() {
   const it = useWizardStore((s) => s.spec.interaction);
@@ -70,23 +86,25 @@ export function InteractionStep() {
 
       {/* 도구 정책 (도구호출 에이전트일 때) */}
       {isAgent && (
-        <fieldset className="grid grid-cols-3 gap-3 rounded-md border border-border p-3">
-          <legend className="px-1 text-xs font-medium text-muted">도구 실행</legend>
-          <SelectField
-            label="실행 정책"
+        <div className="space-y-3 rounded-md border border-border p-3">
+          <OptionCards
+            label="도구 실행 정책"
+            columns={3}
             value={it.toolPolicy}
             onChange={(v) => update("interaction", { toolPolicy: v as (typeof TOOL_POLICIES)[number] })}
-            options={opts(TOOL_POLICIES, L.toolPolicy)}
+            options={TOOL_POLICIES.map((id) => ({ id, label: L.toolPolicy[id], description: TOOLPOLICY_DESC[id] }))}
           />
-          <NumberField label="최대 반복(루프)" value={it.maxSteps} onChange={(v) => update("interaction", { maxSteps: v })} />
-          <div className="flex items-end pb-2">
-            <ToggleField
-              label="병렬 호출"
-              checked={it.parallelTools ?? false}
-              onChange={(v) => update("interaction", { parallelTools: v })}
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <NumberField label="최대 반복(루프)" value={it.maxSteps} onChange={(v) => update("interaction", { maxSteps: v })} />
+            <div className="flex items-end pb-2">
+              <ToggleField
+                label="병렬 호출"
+                checked={it.parallelTools ?? false}
+                onChange={(v) => update("interaction", { parallelTools: v })}
+              />
+            </div>
           </div>
-        </fieldset>
+        </div>
       )}
 
       {/* 스트리밍/타이핑 */}
@@ -96,11 +114,12 @@ export function InteractionStep() {
           checked={it.streaming.enabled}
           onChange={(v) => update("interaction", { streaming: { ...it.streaming, enabled: v } })}
         />
-        <SelectField
+        <OptionCards
           label="속도"
+          columns={4}
           value={it.streaming.speed}
           onChange={(v) => update("interaction", { streaming: { ...it.streaming, speed: v as (typeof STREAM_SPEEDS)[number] } })}
-          options={opts(STREAM_SPEEDS, L.speed)}
+          options={STREAM_SPEEDS.map((id) => ({ id, label: L.speed[id], description: SPEED_DESC[id] }))}
         />
         <OptionCards
           label="타이핑 인디케이터"
@@ -118,19 +137,21 @@ export function InteractionStep() {
         onChange={(v) => update("interaction", { rendering: { ...it.rendering, citationStyle: v as (typeof CITATION_STYLES)[number] } })}
         options={CITATION_STYLES.map((id) => ({ id, label: L.citationStyle[id], preview: <CitationPrev id={id} /> }))}
       />
-      <fieldset className="grid grid-cols-2 gap-3">
-        <SelectField
-          label="도구호출 표시"
-          value={it.rendering.toolCallDisplay}
-          onChange={(v) => update("interaction", { rendering: { ...it.rendering, toolCallDisplay: v as (typeof TOOLCALL_DISPLAYS)[number] } })}
-          options={opts(TOOLCALL_DISPLAYS, L.toolCallDisplay)}
-        />
-        <SelectField
-          label="답변 길이"
-          value={it.output.length}
-          onChange={(v) => update("interaction", { output: { ...it.output, length: v as (typeof OUTPUT_LENGTHS)[number] } })}
-          options={opts(OUTPUT_LENGTHS, L.length)}
-        />
+      <OptionCards
+        label="도구호출 표시"
+        columns={3}
+        value={it.rendering.toolCallDisplay}
+        onChange={(v) => update("interaction", { rendering: { ...it.rendering, toolCallDisplay: v as (typeof TOOLCALL_DISPLAYS)[number] } })}
+        options={TOOLCALL_DISPLAYS.map((id) => ({ id, label: L.toolCallDisplay[id], description: TOOLCALL_DESC[id] }))}
+      />
+      <OptionCards
+        label="답변 길이"
+        columns={3}
+        value={it.output.length}
+        onChange={(v) => update("interaction", { output: { ...it.output, length: v as (typeof OUTPUT_LENGTHS)[number] } })}
+        options={OUTPUT_LENGTHS.map((id) => ({ id, label: L.length[id], description: LENGTH_DESC[id] }))}
+      />
+      <fieldset className="grid grid-cols-3 gap-3">
         <ToggleField label="마크다운" checked={it.rendering.markdown} onChange={(v) => update("interaction", { rendering: { ...it.rendering, markdown: v } })} />
         <ToggleField label="코드블록" checked={it.rendering.codeBlocks} onChange={(v) => update("interaction", { rendering: { ...it.rendering, codeBlocks: v } })} />
         <ToggleField
@@ -190,21 +211,23 @@ export function InteractionStep() {
 
       {/* 음성 엔진 (voice 선택 시) */}
       {hasVoice && (
-        <fieldset className="grid grid-cols-2 gap-3 rounded-md border border-border p-3">
-          <legend className="px-1 text-xs font-medium text-muted">음성 엔진 (*-local = 폐쇄망 적합)</legend>
-          <SelectField
+        <div className="space-y-3 rounded-md border border-border p-3">
+          <span className="text-xs font-medium text-muted">음성 엔진 (온프레미스 = 폐쇄망 적합)</span>
+          <OptionCards
             label="STT (음성 인식)"
+            columns={3}
             value={it.voice.stt}
             onChange={(v) => update("interaction", { voice: { ...it.voice, stt: v as (typeof VOICE_STT_ENGINES)[number] } })}
-            options={opts(VOICE_STT_ENGINES, VOICE_LABELS)}
+            options={voiceOpts(VOICE_STT_ENGINES)}
           />
-          <SelectField
+          <OptionCards
             label="TTS (음성 합성)"
+            columns={3}
             value={it.voice.tts}
             onChange={(v) => update("interaction", { voice: { ...it.voice, tts: v as (typeof VOICE_TTS_ENGINES)[number] } })}
-            options={opts(VOICE_TTS_ENGINES, VOICE_LABELS)}
+            options={voiceOpts(VOICE_TTS_ENGINES)}
           />
-        </fieldset>
+        </div>
       )}
 
       {/* 이용 고지 / 동의 배너 */}

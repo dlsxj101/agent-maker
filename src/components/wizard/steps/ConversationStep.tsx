@@ -2,8 +2,81 @@
 
 import { useWizardStore } from "@/lib/store";
 import { PERSONA_TONES, FALLBACK_ON_UNKNOWN, HANDOFF_MODES } from "@/lib/agent-spec";
-import { label } from "@/generators/format";
-import { SelectField, TextField, StringListField, Field, NumberField } from "../controls";
+import { OptionCards, TextField, StringListField, Field, NumberField } from "../controls";
+
+/* -------------------------------------------------------------------------- */
+/* 말투/톤 — 예시 발화로 느낌을 즉시 체감할 수 있는 카드 옵션                       */
+/* -------------------------------------------------------------------------- */
+
+const TONE_OPTIONS = [
+  {
+    id: "formal" as (typeof PERSONA_TONES)[number],
+    label: "격식체",
+    description: "공공기관 표준 문어체. 존칭·경어 사용.",
+    preview: <span className="text-xs text-muted italic">{"“안녕하십니까, 무엇을 도와드릴까요?”"}</span>,
+  },
+  {
+    id: "concise" as (typeof PERSONA_TONES)[number],
+    label: "간결체",
+    description: "군더더기 없이 핵심만 전달. 업무 효율 우선.",
+    preview: <span className="text-xs text-muted italic">{"“용건을 말씀해 주세요.”"}</span>,
+  },
+  {
+    id: "friendly" as (typeof PERSONA_TONES)[number],
+    label: "친근체",
+    description: "부드럽고 편안한 어투. 시민 친화형.",
+    preview: <span className="text-xs text-muted italic">{"“안녕하세요! 무엇을 도와드릴까요 😊”"}</span>,
+  },
+] as const;
+
+/* -------------------------------------------------------------------------- */
+/* 모르는 질문 처리 방식                                                          */
+/* -------------------------------------------------------------------------- */
+
+const ON_UNKNOWN_OPTIONS = [
+  {
+    id: "apologize" as (typeof FALLBACK_ON_UNKNOWN)[number],
+    label: "모른다고 사과",
+    description: "답변 불가 시 정중히 사과하고 안내 채널을 제시합니다.",
+  },
+  {
+    id: "rephrase" as (typeof FALLBACK_ON_UNKNOWN)[number],
+    label: "재질문 유도",
+    description: "질문을 다시 표현해 달라고 요청해 이해를 재시도합니다.",
+  },
+  {
+    id: "handoff" as (typeof FALLBACK_ON_UNKNOWN)[number],
+    label: "상담사 즉시 연결",
+    description: "모르는 질문이 오면 바로 상담사(사람)에게 넘깁니다.",
+  },
+] as const;
+
+/* -------------------------------------------------------------------------- */
+/* 상담사 연결(에스컬레이션) 방식                                                 */
+/* -------------------------------------------------------------------------- */
+
+const HANDOFF_OPTIONS = [
+  {
+    id: "none" as (typeof HANDOFF_MODES)[number],
+    label: "연결 없음",
+    description: "상담사 연결 기능을 사용하지 않습니다.",
+  },
+  {
+    id: "human-agent" as (typeof HANDOFF_MODES)[number],
+    label: "채팅 상담사",
+    description: "실시간 채팅으로 사람 상담사에게 넘깁니다.",
+  },
+  {
+    id: "phone" as (typeof HANDOFF_MODES)[number],
+    label: "전화 안내",
+    description: "상담 전화번호를 안내하고 통화를 유도합니다.",
+  },
+  {
+    id: "email" as (typeof HANDOFF_MODES)[number],
+    label: "이메일 접수",
+    description: "이메일 문의 양식으로 연결합니다.",
+  },
+] as const;
 
 export function ConversationStep() {
   const conv = useWizardStore((s) => s.spec.conversation);
@@ -15,11 +88,13 @@ export function ConversationStep() {
 
   return (
     <div className="space-y-5">
-      <SelectField
+      {/* 말투/톤 — 예시 발화 미리보기가 있는 시각 카드 */}
+      <OptionCards
         label="말투/톤"
         value={conv.persona.tone}
         onChange={(v) => update("conversation", { persona: { ...conv.persona, tone: v as (typeof PERSONA_TONES)[number] } })}
-        options={PERSONA_TONES.map((t) => [t, label("tone", t)])}
+        options={TONE_OPTIONS}
+        columns={3}
       />
       <TextField
         label="화자 (선택)"
@@ -74,17 +149,21 @@ export function ConversationStep() {
         onChange={(v) => update("conversation", { quickReplies: v })}
       />
 
-      <SelectField
+      {/* 모르는 질문 처리 방식 — 시각 카드 */}
+      <OptionCards
         label="모르는 질문 처리"
         value={conv.fallback.onUnknown}
         onChange={(v) => update("conversation", { fallback: { ...conv.fallback, onUnknown: v as (typeof FALLBACK_ON_UNKNOWN)[number] } })}
-        options={FALLBACK_ON_UNKNOWN.map((f) => [f, label("onUnknown", f)])}
+        options={ON_UNKNOWN_OPTIONS}
+        columns={3}
       />
-      <SelectField
+      {/* 상담사 연결(에스컬레이션) 방식 — 기본값 "none", 시각 카드 */}
+      <OptionCards
         label="상담사 연결(에스컬레이션)"
         value={conv.fallback.handoff ?? "none"}
         onChange={(v) => update("conversation", { fallback: { ...conv.fallback, handoff: v as (typeof HANDOFF_MODES)[number] } })}
-        options={HANDOFF_MODES.map((h) => [h, label("handoff", h)])}
+        options={HANDOFF_OPTIONS}
+        columns={2}
         hint="민원 챗봇은 상담사 연결을 권장합니다."
       />
       {conv.fallback.handoff && conv.fallback.handoff !== "none" && (
