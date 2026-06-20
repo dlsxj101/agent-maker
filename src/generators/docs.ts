@@ -107,7 +107,11 @@ export function renderPromptMd(spec: AgentSpec): string {
     `${n++}. **대화 설계 반영**: 페르소나/인텐트/빠른응답/폴백(${label(
       "onUnknown",
       spec.conversation.fallback.onUnknown,
-    )})을 구현한다. 인텐트가 비어 있으면 \`agent-spec.json\`의 \`conversation\`을 보고 대표 시나리오를 먼저 정의한다.`,
+    )})을 구현한다. 인텐트가 비어 있으면 \`agent-spec.json\`의 \`conversation\`을 보고 대표 시나리오를 먼저 정의한다.${
+      spec.conversation.fallback.handoff && spec.conversation.fallback.handoff !== "none"
+        ? ` 상담사 연결(${spec.conversation.fallback.handoff})${spec.conversation.fallback.handoffSlaMin ? `, 목표 ${spec.conversation.fallback.handoffSlaMin}분 내` : ""}.`
+        : ""
+    }`,
   );
   const it = spec.interaction;
   const modeLabel = {
@@ -133,6 +137,17 @@ export function renderPromptMd(spec: AgentSpec): string {
   if (it.multimodal.length) {
     interactionExtra.push(`멀티모달: ${it.multimodal.join(", ")} (접근성 연계).`);
   }
+  if (it.voice.stt !== "none" || it.voice.tts !== "none") {
+    interactionExtra.push(`음성 엔진: STT "${it.voice.stt}"·TTS "${it.voice.tts}".`);
+  }
+  if (it.disclaimer.aiNotice || it.disclaimer.consent) {
+    interactionExtra.push(
+      `고지/동의: ${[it.disclaimer.aiNotice && "AI 답변 고지", it.disclaimer.consent && "이용 동의 필요"].filter(Boolean).join(", ")}.`,
+    );
+  }
+  if (it.a11yControls.length) {
+    interactionExtra.push(`접근성 컨트롤: ${it.a11yControls.join(", ")} (KWCAG).`);
+  }
   steps.push(
     `${n++}. **상호작용/동작 방식 구현**: 동작 방식은 ${modeLabel}. ${interactionExtra.join(" ")} 대화 컨트롤: ${
       it.controls.join(", ") || "(없음)"
@@ -144,7 +159,11 @@ export function renderPromptMd(spec: AgentSpec): string {
   const caps: string[] = [];
   if (ag.askUser) caps.push("정보 부족 시 사용자에게 명확화 질문(AskUser)");
   if (ag.subAgents.enabled)
-    caps.push(`서브에이전트${ag.subAgents.maxParallel ? `(최대 ${ag.subAgents.maxParallel} 병렬)` : ""}`);
+    caps.push(
+      `서브에이전트${ag.subAgents.maxParallel ? `(최대 ${ag.subAgents.maxParallel} 병렬)` : ""}${
+        ag.subAgents.roles.length ? ` — 역할: ${ag.subAgents.roles.map((r) => r.name).join(", ")}` : ""
+      }`,
+    );
   if (ag.builtinTools.length) caps.push(`내장 도구: ${ag.builtinTools.join(", ")}`);
   if (ag.memory.longTerm) caps.push("장기 기억(세션 간 벡터 기억)");
   if (ag.context.autoCompact) caps.push(`컨텍스트 자동 압축(${ag.context.strategy}${ag.context.budgetTokens ? `, ${ag.context.budgetTokens} 토큰` : ""})`);
@@ -153,7 +172,9 @@ export function renderPromptMd(spec: AgentSpec): string {
   );
 
   steps.push(
-    `${n++}. **평가 골든셋 검증**: 동봉된 테스트 골격(\`tests/\`)을 실행해 \`evaluation\` 골든셋을 통과시킨다. 통과 못 하면 RAG/프롬프트를 조정한다.`,
+    `${n++}. **평가 골든셋 검증**: 동봉된 테스트 골격(\`tests/\`)을 실행해 \`evaluation\` 골든셋을 통과시킨다. 통과 못 하면 RAG/프롬프트를 조정한다.${
+      spec.evaluation.abTesting ? " 프롬프트/모델 변형 A/B 응답 비교를 구성한다." : ""
+    }`,
   );
   steps.push(
     `${n++}. **컴플라이언스 점검**: 접근성(${label(

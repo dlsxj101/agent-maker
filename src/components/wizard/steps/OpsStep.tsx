@@ -14,6 +14,7 @@ const CACHE_LABELS: Record<string, string> = {
   prompt: "프롬프트",
   embedding: "임베딩",
   response: "응답",
+  "tool-result": "도구 결과",
   none: "없음",
 };
 
@@ -65,7 +66,7 @@ export function OpsStep() {
         label="캐싱 전략"
         value={ops.performance?.caching ?? []}
         onChange={(v) =>
-          update("ops", { performance: { caching: v as ("prompt" | "embedding" | "response" | "none")[] } })
+          update("ops", { performance: { caching: v as typeof CACHING_LAYERS[number][] } })
         }
         options={CACHING_LAYERS.map((c) => [c, CACHE_LABELS[c] ?? c])}
       />

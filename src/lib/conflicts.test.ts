@@ -95,6 +95,19 @@ describe("detectConflicts", () => {
     expect(ids(spec)).toContain("C14");
   });
 
+  it("음성 입력 켜고 STT 엔진 미선택이면 C15", () => {
+    const spec = createDraftSpec({ interaction: { multimodal: ["voice-input"] } });
+    expect(ids(spec)).toContain("C15");
+  });
+
+  it("폐쇄망 + 클라우드 음성 엔진이면 C16", () => {
+    const spec = createDraftSpec({
+      backend: { network: "offline" },
+      interaction: { voice: { stt: "clova", tts: "none" } },
+    });
+    expect(ids(spec)).toContain("C16");
+  });
+
   it("오프라인 설치 패키지 + 공식 API LLM 이면 C10", () => {
     const spec = createDraftSpec({
       llm: { serving: "official-api" },

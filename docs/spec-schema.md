@@ -245,6 +245,7 @@ conversation: {
   fallback: {                          # 폴백 / 상담사 연결(에스컬레이션)
     onUnknown: enum{ apologize | rephrase | handoff }   # 모르는 질문 처리
     handoff?: enum{ none | human-agent | phone | email } # 상담원 전환 수단
+    handoffSlaMin?: number               # 상담사 연결 목표 응답시간(분)
     offHoursMessage?: string           # 운영시간 외 안내
   }
   i18n?: {                             # 다국어 응답 정책 (project.languages와 정합)
@@ -294,10 +295,22 @@ interaction: {
   controls: enum[]{ stop | regenerate | copy | feedback | clear | export }   # 대화 컨트롤
   feedback: enum{ none | thumbs | rating }                    # 피드백 방식
   multimodal: enum[]{ image-input | file-upload | voice-input | voice-output }
+  voice: {                              # multimodal 에 voice-* 선택 시
+    stt: enum{ none | browser | whisper-local | clova | google }   # *-local = 폐쇄망 적합
+    tts: enum{ none | browser | coqui-local | clova | google }
+  }
+  disclaimer: {                         # 이용 고지 / 동의 (공공)
+    aiNotice: boolean                   # "AI가 답변합니다" 고지
+    consent: boolean                    # 개인정보/이용 동의 필요
+    text?: string
+  }
+  states: { error?: string, offline?: string, empty?: string }   # 상태 메시지
+  a11yControls: enum[]{ font-size | high-contrast | screen-reader-hints }   # 접근성 사용자 컨트롤(KWCAG)
 }
 ```
 
 > ⚠️ `agentMode=tool-agent` 인데 `integrations.tools` 가 비면 충돌 경고(C12).
+> ⚠️ voice 모달리티인데 엔진 미선택(C15) / 폐쇄망 + 클라우드 음성 엔진(C16).
 
 ---
 
@@ -312,6 +325,7 @@ agent: {
   subAgents: {
     enabled: boolean                   # 하위 작업 분담 보조 에이전트
     maxParallel?: number
+    roles: { name, purpose? }[]        # 하위 에이전트 역할 명세
   }
   builtinTools: enum[]{                # 일반 능력 도구 (커스텀 API 는 §11 integrations.tools)
     web-search | code-interpreter | calculator | file-reader | image-gen
@@ -374,6 +388,7 @@ evaluation: {
     pii-avoidance |                    # 민감정보 응답 회피
     refusal-appropriateness            # 거절 적절성
   }
+  abTesting: boolean                   # 프롬프트/모델 변형 A/B 응답 비교
   acceptance?: {                       # 합격선
     minRetrievalHit?: number           # 예: 0.8
     minCitationAccuracy?: number
@@ -423,7 +438,7 @@ ops: {
     alertThreshold?: string            # 알림 임계치
   }
   performance?: {                      # 캐싱 등 (backend.sla와 연계)
-    caching: enum[]{ prompt | embedding | response | none }
+    caching: enum[]{ prompt | embedding | response | tool-result | none }
   }
   process?: {                          # 운영 프로세스
     kbUpdateCycle?: string             # 지식베이스 갱신 주기
@@ -454,6 +469,8 @@ ops: {
 | C12 | `interaction.agentMode=tool-agent` + `integrations.tools` 비어 있음 | 호출할 도구 정의 권고(빈 에이전트 방지) |
 | C13 | `backend.network=airgap` + `agent.builtinTools` 에 web-search/image-gen | 외부망 도구 비활성 또는 온프레미스 대안 권고 |
 | C14 | `agent.context.autoCompact=true` + `strategy=none` | 압축 전략 선택 권고 |
+| C15 | voice 모달리티 + `interaction.voice` 엔진 미선택 | STT/TTS 엔진 지정 권고 |
+| C16 | `backend.network=offline` + 클라우드 음성 엔진(clova/google) | 온프레미스 음성 엔진 권고 |
 
 ### Export 차단 게이트 (검토 반영)
 

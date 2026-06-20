@@ -166,6 +166,29 @@ export function detectConflicts(spec: AgentSpec): Conflict[] {
     }
   }
 
+  // C15: 음성 모달리티를 켰는데 엔진 미선택
+  const it = spec.interaction;
+  if (
+    (it.multimodal.includes("voice-input") && it.voice.stt === "none") ||
+    (it.multimodal.includes("voice-output") && it.voice.tts === "none")
+  ) {
+    out.push({
+      id: "C15",
+      section: "interaction",
+      message: "음성 입출력을 켰지만 음성 엔진(STT/TTS)이 선택되지 않았습니다. 엔진을 지정하세요.",
+    });
+  }
+
+  // C16: 폐쇄망인데 클라우드 음성 엔진
+  const cloudVoice = ["clova", "google"];
+  if (spec.backend.network === "offline" && (cloudVoice.includes(it.voice.stt) || cloudVoice.includes(it.voice.tts))) {
+    out.push({
+      id: "C16",
+      section: "interaction",
+      message: "폐쇄망 환경에 클라우드 음성 엔진(클로바/구글)이 선택됐습니다. 온프레미스(whisper-local/coqui-local)를 쓰세요.",
+    });
+  }
+
   // C14: 자동 압축을 켰는데 전략이 없음
   if (spec.agent.context.autoCompact && spec.agent.context.strategy === "none") {
     out.push({

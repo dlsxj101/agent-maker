@@ -2,7 +2,7 @@
 
 import { useWizardStore } from "@/lib/store";
 import { EVAL_METRICS } from "@/lib/agent-spec";
-import { ChipMulti, Field, NumberField } from "../controls";
+import { ChipMulti, Field, NumberField, ToggleField } from "../controls";
 
 const METRIC_LABELS: Record<string, string> = {
   "retrieval-hit": "검색 적중",
@@ -79,6 +79,12 @@ export function EvaluationStep() {
           onChange={(v) => update("evaluation", { acceptance: { ...evaluation.acceptance, minCitationAccuracy: v } })}
         />
       </div>
+
+      <ToggleField
+        label="A/B 응답 비교 (프롬프트/모델 변형 평가)"
+        checked={evaluation.abTesting}
+        onChange={(v) => update("evaluation", { abTesting: v })}
+      />
     </div>
   );
 }

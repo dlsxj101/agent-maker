@@ -3,7 +3,7 @@
 import { useWizardStore } from "@/lib/store";
 import { PERSONA_TONES, FALLBACK_ON_UNKNOWN, HANDOFF_MODES } from "@/lib/agent-spec";
 import { label } from "@/generators/format";
-import { SelectField, TextField, StringListField, Field } from "../controls";
+import { SelectField, TextField, StringListField, Field, NumberField } from "../controls";
 
 export function ConversationStep() {
   const conv = useWizardStore((s) => s.spec.conversation);
@@ -87,6 +87,14 @@ export function ConversationStep() {
         options={HANDOFF_MODES.map((h) => [h, label("handoff", h)])}
         hint="민원 챗봇은 상담사 연결을 권장합니다."
       />
+      {conv.fallback.handoff && conv.fallback.handoff !== "none" && (
+        <NumberField
+          label="상담사 연결 목표 응답시간(분, SLA)"
+          value={conv.fallback.handoffSlaMin}
+          onChange={(v) => update("conversation", { fallback: { ...conv.fallback, handoffSlaMin: v } })}
+          hint="예: 5 (5분 내 상담사 연결 목표)"
+        />
+      )}
     </div>
   );
 }

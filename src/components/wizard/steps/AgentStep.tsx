@@ -12,10 +12,20 @@ import {
   CONTEXT_STRATEGIES,
   REFUSAL_STYLES,
 } from "@/lib/agent-spec";
-import { SelectField, ToggleField, NumberField } from "../controls";
+import { ToggleField, NumberField, OptionCards, StringListField } from "../controls";
 
-const opts = <T extends string>(arr: readonly T[], map: Record<string, string>) =>
-  arr.map((v) => [v, map[v] ?? v] as const);
+const CONTEXT_PREV: Record<string, string> = {
+  none: "전체 유지",
+  summarize: "🗜 오래된 대화 요약",
+  truncate: "✂ 오래된 메시지 절단",
+  "sliding-window": "▭▭▭ 최근 N개만",
+};
+const REFUSAL_PREV: Record<string, string> = {
+  polite: "“죄송하지만 도와드리기 어렵습니다.”",
+  brief: "“답변할 수 없습니다.”",
+  redirect: "“담당 부서(☎)로 안내드릴게요.”",
+  strict: "“규정 제3조에 따라 제공 불가합니다.”",
+};
 
 export function AgentStep() {
   const ag = useWizardStore((s) => s.spec.agent);
@@ -61,6 +71,24 @@ export function AgentStep() {
         )}
       </fieldset>
 
+      {/* 서브에이전트 역할(role) 명세 */}
+      {ag.subAgents.enabled && (
+        <StringListField
+          label="서브에이전트 역할"
+          value={ag.subAgents.roles.map((r) => r.name)}
+          onChange={(names) =>
+            update("agent", {
+              subAgents: {
+                ...ag.subAgents,
+                roles: names.map((name, i) => ({ name, purpose: ag.subAgents.roles[i]?.purpose })),
+              },
+            })
+          }
+          placeholder="예: 검색 담당 / 요약 담당 / 검증 담당"
+          hint="각 하위 에이전트가 맡을 전문 역할"
+        />
+      )}
+
       {/* 내장 도구 (카드) */}
       <div>
         <span className="mb-1.5 block text-sm font-medium">내장 도구</span>
@@ -95,50 +123,61 @@ export function AgentStep() {
       </div>
 
       {/* 컨텍스트 관리 */}
-      <fieldset className="grid grid-cols-3 gap-3 rounded-md border border-border p-3">
-        <legend className="px-1 text-xs font-medium text-muted">컨텍스트 관리</legend>
-        <div className="flex items-end pb-2">
-          <ToggleField
-            label="자동 압축"
-            checked={ag.context.autoCompact}
-            onChange={(v) => update("agent", { context: { ...ag.context, autoCompact: v } })}
-          />
-        </div>
-        <SelectField
-          label="압축 전략"
+      <div className="space-y-3">
+        <OptionCards
+          label="컨텍스트 압축 전략"
+          columns={4}
           value={ag.context.strategy}
           onChange={(v) => update("agent", { context: { ...ag.context, strategy: v as (typeof CONTEXT_STRATEGIES)[number] } })}
-          options={opts(CONTEXT_STRATEGIES, AGENT_LABELS.contextStrategy)}
+          options={CONTEXT_STRATEGIES.map((id) => ({
+            id,
+            label: AGENT_LABELS.contextStrategy[id],
+            preview: <span className="text-[10px] text-muted">{CONTEXT_PREV[id]}</span>,
+          }))}
         />
-        <NumberField
-          label="압축 트리거(토큰)"
-          value={ag.context.budgetTokens}
-          onChange={(v) => update("agent", { context: { ...ag.context, budgetTokens: v } })}
-        />
-      </fieldset>
+        <fieldset className="grid grid-cols-2 gap-3">
+          <div className="flex items-end pb-2">
+            <ToggleField
+              label="자동 압축 활성"
+              checked={ag.context.autoCompact}
+              onChange={(v) => update("agent", { context: { ...ag.context, autoCompact: v } })}
+            />
+          </div>
+          <NumberField
+            label="압축 트리거(토큰)"
+            value={ag.context.budgetTokens}
+            onChange={(v) => update("agent", { context: { ...ag.context, budgetTokens: v } })}
+          />
+        </fieldset>
+      </div>
 
       {/* 안전 */}
-      <fieldset className="grid grid-cols-3 gap-3 rounded-md border border-border p-3">
-        <legend className="px-1 text-xs font-medium text-muted">안전 (LLM 가드레일 보완)</legend>
-        <SelectField
-          label="거절 스타일"
+      <div className="space-y-3">
+        <OptionCards
+          label="거절 스타일 (LLM 가드레일 보완)"
           value={ag.safety.refusalStyle}
           onChange={(v) => update("agent", { safety: { ...ag.safety, refusalStyle: v as (typeof REFUSAL_STYLES)[number] } })}
-          options={opts(REFUSAL_STYLES, AGENT_LABELS.refusalStyle)}
+          options={REFUSAL_STYLES.map((id) => ({
+            id,
+            label: AGENT_LABELS.refusalStyle[id],
+            preview: <span className="text-[10px] italic text-muted">{REFUSAL_PREV[id]}</span>,
+          }))}
         />
-        <NumberField
-          label="분당 요청 상한"
-          value={ag.safety.rateLimitPerMin}
-          onChange={(v) => update("agent", { safety: { ...ag.safety, rateLimitPerMin: v } })}
-        />
-        <div className="flex items-end pb-2">
-          <ToggleField
-            label="남용 필터"
-            checked={ag.safety.abuseFilter}
-            onChange={(v) => update("agent", { safety: { ...ag.safety, abuseFilter: v } })}
+        <fieldset className="grid grid-cols-2 gap-3">
+          <NumberField
+            label="분당 요청 상한"
+            value={ag.safety.rateLimitPerMin}
+            onChange={(v) => update("agent", { safety: { ...ag.safety, rateLimitPerMin: v } })}
           />
-        </div>
-      </fieldset>
+          <div className="flex items-end pb-2">
+            <ToggleField
+              label="남용 필터"
+              checked={ag.safety.abuseFilter}
+              onChange={(v) => update("agent", { safety: { ...ag.safety, abuseFilter: v } })}
+            />
+          </div>
+        </fieldset>
+      </div>
     </div>
   );
 }

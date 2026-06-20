@@ -132,6 +132,13 @@ export const BUILTIN_TOOLS = [
 export const CONTEXT_STRATEGIES = ["none", "summarize", "truncate", "sliding-window"] as const;
 export const REFUSAL_STYLES = ["polite", "brief", "redirect", "strict"] as const;
 
+// 음성 엔진 (multimodal voice 선택 시) — *-local 은 폐쇄망 적합
+export const VOICE_STT_ENGINES = ["none", "browser", "whisper-local", "clova", "google"] as const;
+export const VOICE_TTS_ENGINES = ["none", "browser", "coqui-local", "clova", "google"] as const;
+
+// 접근성 사용자 컨트롤 (KWCAG)
+export const A11Y_USER_CONTROLS = ["font-size", "high-contrast", "screen-reader-hints"] as const;
+
 export const API_AUTH_MODES = ["none", "api-key", "oauth", "gpki"] as const;
 export const WEBHOOK_CHANNELS = ["email", "sms", "none"] as const;
 
@@ -146,7 +153,7 @@ export const COMPLIANCE_A11Y = ["none", "kwcag-aa", "kwcag-aaa"] as const;
 export const CERTIFICATIONS = ["gs", "cc", "none"] as const;
 
 export const OBSERVABILITY_METRICS = ["tokens", "latency", "error-rate", "none"] as const;
-export const CACHING_LAYERS = ["prompt", "embedding", "response", "none"] as const;
+export const CACHING_LAYERS = ["prompt", "embedding", "response", "tool-result", "none"] as const;
 
 /* -------------------------------------------------------------------------- */
 /* §0 meta                                                                    */
@@ -379,6 +386,7 @@ const ConversationSchema = z
       .object({
         onUnknown: z.enum(FALLBACK_ON_UNKNOWN).default("apologize"),
         handoff: z.enum(HANDOFF_MODES).optional(),
+        handoffSlaMin: z.number().optional(), // 상담사 연결 목표 응답시간(분)
         offHoursMessage: z.string().optional(),
       })
       .prefault({}),
@@ -432,6 +440,31 @@ const InteractionSchema = z
     controls: z.array(z.enum(CHAT_CONTROLS)).default(["copy", "feedback"]),
     feedback: z.enum(FEEDBACK_STYLES).default("thumbs"),
     multimodal: z.array(z.enum(MODALITIES)).default([]),
+    // 음성 엔진 (multimodal 에 voice-* 선택 시)
+    voice: z
+      .object({
+        stt: z.enum(VOICE_STT_ENGINES).default("none"),
+        tts: z.enum(VOICE_TTS_ENGINES).default("none"),
+      })
+      .prefault({}),
+    // 이용 고지 / 동의 배너 (공공기관)
+    disclaimer: z
+      .object({
+        aiNotice: z.boolean().default(true), // "AI가 답변합니다" 고지
+        consent: z.boolean().default(false), // 개인정보/이용 동의 필요
+        text: z.string().optional(),
+      })
+      .prefault({}),
+    // 상태 메시지
+    states: z
+      .object({
+        error: z.string().optional(),
+        offline: z.string().optional(),
+        empty: z.string().optional(),
+      })
+      .prefault({}),
+    // 접근성 사용자 컨트롤 (KWCAG)
+    a11yControls: z.array(z.enum(A11Y_USER_CONTROLS)).default([]),
   })
   .prefault({});
 
@@ -448,6 +481,10 @@ const AgentSchema = z
       .object({
         enabled: z.boolean().default(false),
         maxParallel: z.number().optional(),
+        // 역할(role) 명세 — 하위 에이전트가 맡을 전문 역할
+        roles: z
+          .array(z.object({ name: z.string(), purpose: z.string().optional() }))
+          .default([]),
       })
       .prefault({}),
     // 내장 도구 (integrations.tools = 커스텀 API, 이건 일반 능력 도구)
@@ -520,6 +557,7 @@ const EvaluationSchema = z
       )
       .default([]),
     metrics: z.array(z.enum(EVAL_METRICS)).default([]),
+    abTesting: z.boolean().default(false), // 프롬프트/모델 변형 A/B 응답 비교
     acceptance: z
       .object({
         minRetrievalHit: z.number().optional(),

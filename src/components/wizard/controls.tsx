@@ -134,6 +134,55 @@ export function ChipMulti(props: {
   );
 }
 
+/**
+ * 시각 선택 카드 (단일 선택) — "동등한 선택지를 보고 고른다" 원칙용.
+ * 각 옵션은 라벨/설명 + 선택적 미리보기(렌더)를 가진다. (CLAUDE.md §4.3)
+ */
+export function OptionCards<T extends string>(props: {
+  label?: string;
+  value: T;
+  onChange: (v: T) => void;
+  options: readonly { id: T; label: string; description?: string; preview?: ReactNode }[];
+  columns?: number;
+  hint?: string;
+}) {
+  const cols = props.columns ?? 2;
+  const grid = { 2: "sm:grid-cols-2", 3: "sm:grid-cols-3", 4: "sm:grid-cols-4" }[cols] ?? "sm:grid-cols-2";
+  const inner = (
+    <div className={`grid grid-cols-1 gap-2 ${grid}`}>
+      {props.options.map((o) => {
+        const active = props.value === o.id;
+        return (
+          <button
+            key={o.id}
+            type="button"
+            aria-pressed={active}
+            onClick={() => props.onChange(o.id)}
+            className={`flex flex-col rounded-lg border p-2.5 text-left transition ${
+              active ? "border-primary ring-2 ring-primary/30" : "border-border hover:border-primary"
+            }`}
+          >
+            {o.preview && (
+              <span className="mb-1.5 flex min-h-[2rem] items-center rounded-md bg-surface-2 px-2 py-1.5">
+                {o.preview}
+              </span>
+            )}
+            <span className="text-sm font-medium">{o.label}</span>
+            {o.description && <span className="mt-0.5 text-[11px] text-muted">{o.description}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+  return props.label ? (
+    <Field label={props.label} hint={props.hint}>
+      {inner}
+    </Field>
+  ) : (
+    inner
+  );
+}
+
 /** 문자열 목록 편집기 (예: quickReplies) */
 export function StringListField(props: {
   label: string;

@@ -96,7 +96,7 @@ describe("공공기관 제약 반영 (제품 핵심 보장)", () => {
       ...cloudSpec,
       agent: {
         ...cloudSpec.agent,
-        subAgents: { enabled: true, maxParallel: 3 },
+        subAgents: { enabled: true, maxParallel: 3, roles: [] },
         builtinTools: ["web-search" as const, "calculator" as const],
         context: { autoCompact: true, strategy: "summarize" as const },
       },
