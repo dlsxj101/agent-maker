@@ -330,7 +330,7 @@ AgentSpec {
 - 마법사 자체의 배포 타깃(정적 export 가능 여부 — 폐쇄망 배포 시나리오) → M6
 - 스캐폴딩 코드의 "깊이" — 스택별로 어디까지 채울지(기동 골격 vs 부분 구현)는 M2 E2E 검증 결과로 조정
 - `npm audit` moderate 2건: Next.js 16이 내부적으로 쓰는 `postcss <8.5.10`(transitive) XSS 권고. `audit fix --force`는 Next를 9.x로 다운그레이드하므로 **적용하지 않음**. Next.js 상위 릴리스에서 해소될 때까지 보류/모니터링. → **M6 배포 전 재확인**
-- ⚠️ **`npm run lint` 깨짐(M0부터)**: Next 16은 `next lint`를 제거했고(인자를 디렉토리로 오인), `npx eslint`도 `eslint-config-next`를 FlatCompat로 불러올 때 circular JSON 오류. 타입 안정성은 `npm run typecheck`/`npm run build`(빌드 중 TS 검사)로 확보 중. lint 툴체인 정비(예: `eslint-config-next` flat config 전환)는 별도 작업으로 분리. → **M3/M6 정비 후보**
+- ✅ **`npm run lint` 정상화(M1)**: Next 16은 `next lint`를 제거했고 FlatCompat+`extends("next/...")`는 ESLint 9에서 circular JSON 오류를 냈다. → `eslint-config-next` **네이티브 flat config**(`/core-web-vitals` + `/typescript`)를 직접 import 하고 스크립트를 `eslint .`로 변경해 해결. `_` 접두사 미사용 변수는 허용 규칙 추가.
 
 ---
 
