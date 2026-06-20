@@ -145,5 +145,14 @@ export function detectConflicts(spec: AgentSpec): Conflict[] {
     });
   }
 
+  // C12: 도구호출 에이전트인데 도구 미정의
+  if (spec.interaction.agentMode === "tool-agent" && spec.integrations.tools.length === 0) {
+    out.push({
+      id: "C12",
+      section: "interaction",
+      message: "도구호출 에이전트인데 호출할 도구가 없습니다. 연동 단계에서 도구(tool)를 정의하세요.",
+    });
+  }
+
   return out;
 }

@@ -81,6 +81,16 @@ describe("공공기관 제약 반영 (제품 핵심 보장)", () => {
     expect(client).toContain("@anthropic-ai/sdk");
   });
 
+  it("도구호출 에이전트 모드는 PROMPT/스캐폴드에 에이전트 루프를 명시한다", () => {
+    const agent = {
+      ...cloudSpec,
+      interaction: { ...cloudSpec.interaction, agentMode: "tool-agent" as const },
+    };
+    const m = fileMap(generateArtifacts(agent, { now: FIXED_NOW }));
+    expect(m["PROMPT.md"]).toContain("도구호출 에이전트");
+    expect(m["src/chat.ts"]).toContain("도구호출 에이전트");
+  });
+
   it("디자인 토큰이 styles.css 에 CSS 변수로 들어간다", () => {
     const css = fileMap(generateArtifacts(cloudSpec, { now: FIXED_NOW }))["public/styles.css"];
     expect(css).toContain("--color-primary: #1F4E8C");

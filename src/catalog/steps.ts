@@ -55,6 +55,11 @@ export const WIZARD_STEPS: WizardStep[] = [
     summary: "페르소나/톤, 인텐트·시나리오, 빠른 응답, 폴백/상담사 연결",
   },
   {
+    id: "interaction",
+    title: "상호작용 & 동작 방식",
+    summary: "에이전트 동작(챗봇/도구호출), 스트리밍·타이핑, 메시지 렌더링, 멀티모달 (라이브 프리뷰)",
+  },
+  {
     id: "integrations",
     title: "연동 & API",
     summary: "외부/내부 API, 도구 사용(tool use), 웹훅",

@@ -77,6 +77,11 @@ describe("detectConflicts", () => {
     expect(ids(spec)).toContain("C7");
   });
 
+  it("도구호출 에이전트 + 도구 미정의면 C12", () => {
+    const spec = createDraftSpec({ interaction: { agentMode: "tool-agent" } });
+    expect(ids(spec)).toContain("C12");
+  });
+
   it("오프라인 설치 패키지 + 공식 API LLM 이면 C10", () => {
     const spec = createDraftSpec({
       llm: { serving: "official-api" },

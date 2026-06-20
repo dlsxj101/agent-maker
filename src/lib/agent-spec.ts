@@ -108,6 +108,17 @@ export const FALLBACK_ON_UNKNOWN = ["apologize", "rephrase", "handoff"] as const
 export const HANDOFF_MODES = ["none", "human-agent", "phone", "email"] as const;
 export const I18N_DEFAULT_LANGS = ["ko", "en"] as const;
 
+// §9 interaction — 상호작용 & 에이전트 동작
+export const AGENT_MODES = ["chatbot", "tool-agent", "rag-cited", "workflow"] as const;
+export const TOOL_POLICIES = ["none", "auto", "confirm"] as const;
+export const STREAM_SPEEDS = ["slow", "normal", "fast", "instant"] as const;
+export const TYPING_INDICATORS = ["dots", "cursor", "none"] as const;
+export const CITATION_STYLES = ["none", "inline", "footnote", "chips"] as const;
+export const TOOLCALL_DISPLAYS = ["hidden", "collapsed", "expanded"] as const;
+export const CHAT_CONTROLS = ["stop", "regenerate", "copy", "feedback"] as const;
+export const FEEDBACK_STYLES = ["none", "thumbs", "rating"] as const;
+export const MODALITIES = ["image-input", "file-upload", "voice-input", "voice-output"] as const;
+
 export const API_AUTH_MODES = ["none", "api-key", "oauth", "gpki"] as const;
 export const WEBHOOK_CHANNELS = ["email", "sms", "none"] as const;
 
@@ -368,7 +379,44 @@ const ConversationSchema = z
   .prefault({});
 
 /* -------------------------------------------------------------------------- */
-/* §9 integrations — 연동 & API                                                */
+/* §9 interaction — 상호작용 & 에이전트 동작 방식 (행동/UX)                      */
+/* -------------------------------------------------------------------------- */
+
+const InteractionSchema = z
+  .object({
+    agentMode: z.enum(AGENT_MODES).default("rag-cited"),
+    toolPolicy: z.enum(TOOL_POLICIES).default("none"),
+    maxSteps: z.number().optional(), // 에이전트 루프 최대 반복 (tool-agent)
+    parallelTools: z.boolean().optional(),
+    streaming: z
+      .object({
+        enabled: z.boolean().default(true),
+        speed: z.enum(STREAM_SPEEDS).default("normal"),
+        indicator: z.enum(TYPING_INDICATORS).default("dots"),
+      })
+      .prefault({}),
+    rendering: z
+      .object({
+        markdown: z.boolean().default(true),
+        codeBlocks: z.boolean().default(true),
+        citationStyle: z.enum(CITATION_STYLES).default("chips"),
+        toolCallDisplay: z.enum(TOOLCALL_DISPLAYS).default("collapsed"),
+      })
+      .prefault({}),
+    welcome: z
+      .object({
+        greeting: z.string().optional(),
+        showSuggestions: z.boolean().default(true),
+      })
+      .prefault({}),
+    controls: z.array(z.enum(CHAT_CONTROLS)).default(["copy", "feedback"]),
+    feedback: z.enum(FEEDBACK_STYLES).default("thumbs"),
+    multimodal: z.array(z.enum(MODALITIES)).default([]),
+  })
+  .prefault({});
+
+/* -------------------------------------------------------------------------- */
+/* §10 integrations — 연동 & API                                               */
 /* -------------------------------------------------------------------------- */
 
 const IntegrationsSchema = z
@@ -395,7 +443,7 @@ const IntegrationsSchema = z
   .prefault({});
 
 /* -------------------------------------------------------------------------- */
-/* §10 evaluation — 평가 & 테스트 (납품 품질 보증)                             */
+/* §11 evaluation — 평가 & 테스트 (납품 품질 보증)                             */
 /* -------------------------------------------------------------------------- */
 
 const EvaluationSchema = z
@@ -420,7 +468,7 @@ const EvaluationSchema = z
   .prefault({});
 
 /* -------------------------------------------------------------------------- */
-/* §11 compliance — 컴플라이언스 (공공기관 필수)                               */
+/* §12 compliance — 컴플라이언스 (공공기관 필수)                               */
 /* -------------------------------------------------------------------------- */
 
 const ComplianceSchema = z
@@ -457,7 +505,7 @@ const ComplianceSchema = z
   .prefault({});
 
 /* -------------------------------------------------------------------------- */
-/* §12 ops — 운영 · 관측 (compliance에서 분리)                                 */
+/* §13 ops — 운영 · 관측 (compliance에서 분리)                                 */
 /* -------------------------------------------------------------------------- */
 
 const OpsSchema = z
@@ -498,10 +546,11 @@ export const AgentSpecSchema = z.object({
   rag: RagSchema, // §6
   llm: LlmSchema, // §7
   conversation: ConversationSchema, // §8
-  integrations: IntegrationsSchema, // §9
-  evaluation: EvaluationSchema, // §10
-  compliance: ComplianceSchema, // §11
-  ops: OpsSchema, // §12
+  interaction: InteractionSchema, // §9
+  integrations: IntegrationsSchema, // §10
+  evaluation: EvaluationSchema, // §11
+  compliance: ComplianceSchema, // §12
+  ops: OpsSchema, // §13
 });
 
 /** 마법사 전역 상태로 쓰이는 설정 타입 */

@@ -256,7 +256,47 @@ conversation: {
 
 ---
 
-## 9. `integrations` — 연동 & API
+## 9. `interaction` — 상호작용 & 에이전트 동작 방식 (행동/UX, 신규)
+
+> "무엇을 말하나"(§8)와 별개로 **"어떻게 동작하고 보이나"**. 모든 필드 기본값 있음(필수 없음).
+
+```
+interaction: {
+  agentMode: enum{                     # 에이전트 동작 방식
+    chatbot |                          # 일반 대화
+    tool-agent |                       # 도구호출 에이전트(ReAct식, trace 표시)
+    rag-cited |                        # 검색+인용 중심 (기본)
+    workflow                           # 단계별 가이드(폼/버튼 흐름)
+  }
+  toolPolicy: enum{ none | auto | confirm }   # 도구 실행 정책 (confirm=사람 승인, HITL)
+  maxSteps?: number                    # 에이전트 루프 최대 반복(tool-agent)
+  parallelTools?: boolean              # 병렬 도구 호출
+  streaming: {
+    enabled: boolean                   # 응답 스트리밍
+    speed: enum{ slow | normal | fast | instant }
+    indicator: enum{ dots | cursor | none }     # 타이핑 인디케이터
+  }
+  rendering: {
+    markdown: boolean
+    codeBlocks: boolean
+    citationStyle: enum{ none | inline | footnote | chips }   # 인용 표시 방식
+    toolCallDisplay: enum{ hidden | collapsed | expanded }    # 도구호출 표시
+  }
+  welcome: {
+    greeting?: string                  # 인사말
+    showSuggestions: boolean           # 추천 질문(quickReplies) 노출
+  }
+  controls: enum[]{ stop | regenerate | copy | feedback }     # 대화 컨트롤
+  feedback: enum{ none | thumbs | rating }                    # 피드백 방식
+  multimodal: enum[]{ image-input | file-upload | voice-input | voice-output }
+}
+```
+
+> ⚠️ `agentMode=tool-agent` 인데 `integrations.tools` 가 비면 충돌 경고(C12).
+
+---
+
+## 10. `integrations` — 연동 & API
 
 ```
 integrations: {
@@ -275,7 +315,7 @@ integrations: {
 
 ---
 
-## 10. `evaluation` — 평가 & 테스트 (납품 품질 보증)
+## 11. `evaluation` — 평가 & 테스트 (납품 품질 보증)
 
 > "한 방에" 만든 결과의 품질을 잴 수 없으면 공공기관 납품 리스크. 산출물에 테스트셋·E2E 테스트
 > 골격을 포함해 생성될 챗봇이 자체 검증할 수 있게 한다. (PLAN.md §4 Step 9)
@@ -302,7 +342,7 @@ evaluation: {
 
 ---
 
-## 11. `compliance` — 컴플라이언스 (공공기관 필수)
+## 12. `compliance` — 컴플라이언스 (공공기관 필수)
 
 ```
 compliance: {
@@ -331,7 +371,7 @@ compliance: {
 
 ---
 
-## 12. `ops` — 운영 · 관측 (compliance에서 분리)
+## 13. `ops` — 운영 · 관측 (compliance에서 분리)
 
 ```
 ops: {
@@ -370,6 +410,7 @@ ops: {
 | C9 | `project.purpose`에 민원 + `conversation.fallback.handoff=none` | 상담사 연결(에스컬레이션) 권고 |
 | C10 | `compliance.procurement.offlineInstaller=true` + 클라우드 의존(LLM/임베딩/DB) | 온프레미스 구성으로 변경 제안 |
 | C11 | `project.languages=multi` + `conversation.i18n` 미설정 | 언어별 응답/지식소스 정책 권고 |
+| C12 | `interaction.agentMode=tool-agent` + `integrations.tools` 비어 있음 | 호출할 도구 정의 권고(빈 에이전트 방지) |
 
 ### Export 차단 게이트 (검토 반영)
 

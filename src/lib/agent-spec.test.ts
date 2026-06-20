@@ -33,6 +33,7 @@ describe("AgentSpec 기본값", () => {
         "rag",
         "llm",
         "conversation",
+        "interaction",
         "integrations",
         "evaluation",
         "compliance",

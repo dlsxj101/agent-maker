@@ -109,6 +109,32 @@ export function renderPromptMd(spec: AgentSpec): string {
       spec.conversation.fallback.onUnknown,
     )})을 구현한다. 인텐트가 비어 있으면 \`agent-spec.json\`의 \`conversation\`을 보고 대표 시나리오를 먼저 정의한다.`,
   );
+  const it = spec.interaction;
+  const modeLabel = {
+    chatbot: "일반 챗봇(모델 단독 대화)",
+    "tool-agent": "도구호출 에이전트(추론→도구 호출→관찰 반복, trace 표시)",
+    "rag-cited": "RAG 인용형(검색→근거 기반 답변+출처)",
+    workflow: "워크플로우 가이드(단계별 입력/분기)",
+  }[it.agentMode];
+  const interactionExtra: string[] = [];
+  if (it.agentMode === "tool-agent") {
+    interactionExtra.push(
+      `에이전트 루프: 도구 실행 정책 "${it.toolPolicy}"${
+        it.maxSteps ? `, 최대 ${it.maxSteps}회 반복` : ""
+      }${it.parallelTools ? ", 병렬 호출" : ""}. 도구호출 표시 "${it.rendering.toolCallDisplay}".`,
+    );
+  }
+  interactionExtra.push(
+    `응답 ${it.streaming.enabled ? `스트리밍(속도 ${it.streaming.speed}, 인디케이터 ${it.streaming.indicator})` : "비스트리밍"}, 렌더링: 마크다운 ${yesno(it.rendering.markdown)}·인용 "${it.rendering.citationStyle}".`,
+  );
+  if (it.multimodal.length) {
+    interactionExtra.push(`멀티모달: ${it.multimodal.join(", ")} (접근성 연계).`);
+  }
+  steps.push(
+    `${n++}. **상호작용/동작 방식 구현**: 동작 방식은 ${modeLabel}. ${interactionExtra.join(" ")} 대화 컨트롤: ${
+      it.controls.join(", ") || "(없음)"
+    }${it.controls.includes("feedback") ? ` (피드백 ${it.feedback})` : ""}.`,
+  );
   steps.push(
     `${n++}. **평가 골든셋 검증**: 동봉된 테스트 골격(\`tests/\`)을 실행해 \`evaluation\` 골든셋을 통과시킨다. 통과 못 하면 RAG/프롬프트를 조정한다.`,
   );

@@ -144,7 +144,14 @@ function maskPii(text: string): string {
 `
     : "";
   const maskApply = masking ? "  const safe = maskPii(text);\n" : "  const safe = text;\n";
+  const it = spec.interaction;
+  const agentLoopNote =
+    it.agentMode === "tool-agent"
+      ? `// 동작: 도구호출 에이전트 — 추론→도구 호출→관찰을 최대 ${it.maxSteps ?? 5}회 반복(정책: ${it.toolPolicy}).\n//       integrations.tools 를 함수로 등록하고 루프를 구현한다. trace 표시: ${it.rendering.toolCallDisplay}.\n`
+      : `// 동작: ${it.agentMode}.\n`;
   return `// 채팅 오케스트레이션 골격: (RAG 검색) → LLM 호출.
+${agentLoopNote}// 응답 스트리밍: ${it.streaming.enabled ? `사용(속도 ${it.streaming.speed}, 인디케이터 ${it.streaming.indicator}) — SSE 또는 ReadableStream 으로 토큰 전송` : "미사용"}.
+// 렌더링: 마크다운 ${it.rendering.markdown} · 인용 "${it.rendering.citationStyle}" · 도구호출 "${it.rendering.toolCallDisplay}".
 ${ragImport}import { complete } from "./llm/client.js";
 
 const GROUNDED_ONLY = ${spec.llm.guardrails.groundedOnly}; // 근거 기반 답변 강제
