@@ -359,6 +359,19 @@ function goldenTest(spec: AgentSpec): string {
         )} },`,
     )
     .join("\n");
+  // expectedSource 가 있는 케이스가 하나라도 있을 때만 "근거 정확도" describe 를 출력한다.
+  // (빈 describe 는 vitest 에서 "No test found" 로 실패하므로 생성하지 않는다.)
+  const hasExpectedSource = cases.some((c) => c.expectedSource);
+  const accuracyBlock = hasExpectedSource
+    ? `
+// 구현 완료 후 활성화할 실제 합격 기준(인용/근거 정확도).
+describe("골든셋 — 근거 정확도(구현 후)", () => {
+  for (const tc of GOLDEN.filter((t) => t.expectedSource)) {
+    it.todo(\`출처 포함: \${tc.question} → \${tc.expectedSource}\`);
+  }
+});
+`
+    : "";
   return `// 평가 골든셋 테스트 골격. (acceptance: 통과해야 납품 가능)
 // 지표: ${spec.evaluation.metrics.join(", ") || "(미선택)"}
 // 실행: LLM_STUB=true 로 플러밍을 먼저 검증하고, 구현 완료 후 실제 LLM 으로 재검증한다.
@@ -378,14 +391,7 @@ describe("골든셋 — 플러밍(LLM_STUB=true)", () => {
     });
   }
 });
-
-// 구현 완료 후 활성화할 실제 합격 기준(인용/근거 정확도).
-describe("골든셋 — 근거 정확도(구현 후)", () => {
-  for (const tc of GOLDEN.filter((t) => t.expectedSource)) {
-    it.todo(\`출처 포함: \${tc.question} → \${tc.expectedSource}\`);
-  }
-});
-`;
+${accuracyBlock}`;
 }
 
 function dockerfile(): string {

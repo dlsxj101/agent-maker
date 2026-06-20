@@ -85,22 +85,29 @@ PROMPT.md · DESIGN.md · CLAUDE.md · agent-spec.json …  →  ZIP
 
 ## 시작하기
 
-> ⚠️ 현재 저장소는 **프로젝트 세팅(M0)** 단계입니다. 마법사 기능은 아직 구현 전이며,
-> 골격과 설계 문서만 존재합니다. 로드맵은 [PLAN.md](PLAN.md) §8을 참고하세요.
+마법사 전 단계가 동작합니다. `/` 에서 시작해 `/wizard` 에서 단계별로 선택하고,
+`/wizard/review` 에서 산출물을 미리 보고 **ZIP으로 내보냅니다**.
 
 ```bash
 # 의존성 설치
 npm install
 
 # 개발 서버 실행
-npm run dev
-# http://localhost:3000
+npm run dev          # http://localhost:3000
 
-# 프로덕션 빌드
-npm run build
+# 검증
+npm test             # 단위/스냅샷 테스트
+npm run typecheck    # 타입 체크
+npm run lint         # 린트
+
+# 빌드 (정적 export → out/)
+npm run build        # 폐쇄망 배포: out/ 의 정적 파일만으로 어떤 웹서버에서도 서빙 가능
 ```
 
-요구 사항: **Node.js 20+** (개발은 Node 24에서 확인), npm.
+요구 사항: **Node.js 20+** (개발은 Node 22/24에서 확인), npm.
+
+> **폐쇄망 배포**: `output: "export"` 로 빌드하면 서버 없이 `out/` 의 정적 파일만으로 동작합니다.
+> 산출물 생성·ZIP 묶음이 모두 브라우저에서 처리되어 외부 호출이 없습니다.
 
 ---
 

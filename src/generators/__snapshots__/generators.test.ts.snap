@@ -638,13 +638,6 @@ describe("골든셋 — 플러밍(LLM_STUB=true)", () => {
     });
   }
 });
-
-// 구현 완료 후 활성화할 실제 합격 기준(인용/근거 정확도).
-describe("골든셋 — 근거 정확도(구현 후)", () => {
-  for (const tc of GOLDEN.filter((t) => t.expectedSource)) {
-    it.todo(\`출처 포함: \${tc.question} → \${tc.expectedSource}\`);
-  }
-});
 ",
   "tsconfig.json": "{
   "compilerOptions": {

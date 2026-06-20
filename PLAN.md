@@ -316,11 +316,13 @@ AgentSpec {
   - ✅ 충돌 규칙 완성(C1~C11) + **비용 추정**(`cost.ts`) Review 노출
   - 단위 테스트: 충돌/준비도/비용 17케이스 (총 39 통과)
 
-- **M6 — 전체 회귀 검증 & 배포 & 문서화**
-  - **완성된 카탈로그로 산출물 E2E 재검증** (대표 프로필 ≥2: 폐쇄망/클라우드) — M2 검증을 전 범위로 확장
-  - 배포 타깃 확정(정적 export 여부), `npm audit` 부채 최종 처리
-  - i18n(산출물 다국어): 범위 확정 후 포함 또는 백로그
-  - 사용자 문서/README 갱신
+- **M6 — 전체 회귀 검증 & 배포 & 문서화** ✅ *(완료)*
+  - ✅ **전 범위 E2E 재검증**: cloud + airgap 두 프로필 모두 생성 ZIP → `npm install` → `tsc` 빌드 → `/health` 200 → 골든셋(LLM_STUB) 통과.
+    - 회귀로 버그 1건 발견·수정: 골든셋에 `expectedSource` 케이스가 없으면 빈 `describe` 생성 → vitest "No test found" 실패. → 케이스가 있을 때만 해당 describe 출력하도록 생성기 수정.
+  - ✅ **배포 타깃 확정 = 정적 export**(`next.config.ts` `output: "export"`). 앱이 완전 클라이언트 사이드라 `out/` 정적 파일만으로 폐쇄망 어떤 웹서버에서도 서빙 가능.
+  - ✅ `npm audit` 재확인: moderate 2건(postcss transitive, Next 9.x 다운그레이드 유발)으로 **보류 유지**(변동 없음).
+  - ✅ i18n(산출물 다국어) → **백로그**로 확정(§9). 현재는 한국어 기준 산출물.
+  - ✅ README 갱신(동작 상태·검증·정적 export 배포).
 
 > **검증 루프 요약** (제품의 본질이므로 로드맵에 명시):
 > - 자동: 골든 산출물 스냅샷 테스트 · `AgentSpec` round-trip · 충돌 규칙 단위 테스트
@@ -340,10 +342,10 @@ AgentSpec {
 - ✅ UI = **커스텀 Tailwind 컴포넌트** 확정 (M4). shadcn/ui·Radix 프레임워크는 미도입(핵심이 커스텀 시각물). 접근성 프리미티브(탭/다이얼로그)가 필요한 곳만 추후 `@radix-ui/*` 최소 도입.
 
 **여전히 열려 있는 항목:**
-- 산출물 다국어(한/영) 지원 범위 → M6에서 범위 확정 또는 백로그
-- 마법사 자체의 배포 타깃(정적 export 가능 여부 — 폐쇄망 배포 시나리오) → M6
-- 스캐폴딩 코드의 "깊이" — 스택별로 어디까지 채울지(기동 골격 vs 부분 구현)는 M2 E2E 검증 결과로 조정
-- `npm audit` moderate 2건: Next.js 16이 내부적으로 쓰는 `postcss <8.5.10`(transitive) XSS 권고. `audit fix --force`는 Next를 9.x로 다운그레이드하므로 **적용하지 않음**. Next.js 상위 릴리스에서 해소될 때까지 보류/모니터링. → **M6 배포 전 재확인**
+- ✅ 마법사 배포 타깃 = **정적 export 확정**(M6, `output: "export"`). 폐쇄망 배포 시 `out/` 정적 파일 서빙.
+- 📌 **백로그**: 산출물 다국어(한/영) — 현재는 한국어 기준. 수요 발생 시 PROMPT/DESIGN 템플릿·UI 라벨 다국어화.
+- 📌 **백로그**: 스캐폴딩 깊이 — 현재 Node/TS 백엔드 스택 중심(다른 스택은 문서 + 기본 골격). 스택별 깊은 템플릿(Python/Java/Go 진입점·매니페스트)은 수요 기반 확장. 라이선스: 미정.
+- `npm audit` moderate 2건: Next.js 16이 내부적으로 쓰는 `postcss <8.5.10`(transitive) XSS 권고. `audit fix --force`는 Next를 9.x로 다운그레이드하므로 **적용하지 않음**. Next.js 상위 릴리스에서 해소될 때까지 보류/모니터링. (M6 재확인: 변동 없음, 보류 유지)
 - ✅ **`npm run lint` 정상화(M1)**: Next 16은 `next lint`를 제거했고 FlatCompat+`extends("next/...")`는 ESLint 9에서 circular JSON 오류를 냈다. → `eslint-config-next` **네이티브 flat config**(`/core-web-vitals` + `/typescript`)를 직접 import 하고 스크립트를 `eslint .`로 변경해 해결. `_` 접두사 미사용 변수는 허용 규칙 추가.
 
 ---
