@@ -274,10 +274,11 @@ AgentSpec {
   - 저장소 초기화, 계획/지침 문서(PLAN/CLAUDE/README/spec-schema), .gitignore/.gitattributes
   - Next.js 골격, `AgentSpec`·생성기·카탈로그 자리표시자, 초기 커밋/푸시
 
-- **M1 — 스키마 골격 + 슬라이스용 카탈로그**
-  - `AgentSpec` Zod **전체 골격**(전 섹션 타입) 확정 + 직렬화 round-trip 테스트
-  - 카탈로그는 슬라이스에 필요한 **최소만**(Step 0 프로젝트 + Step 1 디자인 + Step 6 LLM) 먼저 데이터화
-  - 필수 필드 `required` + 나머지 기본값 부여
+- **M1 — 스키마 골격 + 슬라이스용 카탈로그** ✅ *(완료)*
+  - `AgentSpec` Zod **전체 골격**(§0~§12 전 섹션 타입) 확정 (`src/lib/agent-spec.ts`) + 직렬화 round-trip 테스트 (`src/lib/agent-spec.test.ts`, 11 케이스 통과)
+  - 슬라이스용 카탈로그 데이터화: 디자인(테마 프리셋·폰트) `src/catalog/design.ts`, LLM(제공자·모델) `src/catalog/llm.ts`, 진입점 `src/catalog/index.ts`
+  - **기본값/필수 2단 설계**: 스키마는 전 필드 기본값 부여(`parse({})` → 완전한 초안 생성, 마법사 초기상태·localStorage·round-trip 용이). "필수 필드가 비어 있으면 export 차단"하는 게이트는 별도 준비도 검사로 **M5 Review에서** 구현(`createDraftSpec`/`serializeSpec`/`deserializeSpec` 헬퍼 제공).
+  - Zod 4 메모: 중첩 객체 기본값은 `.default({})`(원시 `{}` 반환, 내부 기본값 미적용)가 아니라 **`.prefault({})`**(기본값을 스키마로 파싱)를 써야 내부 기본값이 재귀 적용된다.
 
 - **M2 — 산출물 생성기 + E2E 검증 (★수직 슬라이스의 핵심, 앞당김)**
   - 0번 작업: **ZIP 라이브러리 확정**(fflate vs jszip)
@@ -317,6 +318,7 @@ AgentSpec {
 
 **확정된 결정 (검토 후):**
 - ✅ **산출물 = 문서 + 스캐폴딩 코드.** (§6 참조) "한 방에" 보장을 위해 코드 골격 포함.
+- ✅ **테스트 러너 = Vitest** (M1에서 도입). TS·`@/*` 경로 별칭·스냅샷(M2 골든 산출물) 지원. `npm test` → `vitest run`. 설정은 `vitest.config.ts`.
 
 **마일스톤에 결정 시점이 묶인 항목** (해당 M의 0번 작업으로 확정):
 - ZIP 라이브러리 (fflate vs jszip) → **M2 0번 작업**
@@ -328,6 +330,7 @@ AgentSpec {
 - 마법사 자체의 배포 타깃(정적 export 가능 여부 — 폐쇄망 배포 시나리오) → M6
 - 스캐폴딩 코드의 "깊이" — 스택별로 어디까지 채울지(기동 골격 vs 부분 구현)는 M2 E2E 검증 결과로 조정
 - `npm audit` moderate 2건: Next.js 16이 내부적으로 쓰는 `postcss <8.5.10`(transitive) XSS 권고. `audit fix --force`는 Next를 9.x로 다운그레이드하므로 **적용하지 않음**. Next.js 상위 릴리스에서 해소될 때까지 보류/모니터링. → **M6 배포 전 재확인**
+- ⚠️ **`npm run lint` 깨짐(M0부터)**: Next 16은 `next lint`를 제거했고(인자를 디렉토리로 오인), `npx eslint`도 `eslint-config-next`를 FlatCompat로 불러올 때 circular JSON 오류. 타입 안정성은 `npm run typecheck`/`npm run build`(빌드 중 TS 검사)로 확보 중. lint 툴체인 정비(예: `eslint-config-next` flat config 전환)는 별도 작업으로 분리. → **M3/M6 정비 후보**
 
 ---
 
