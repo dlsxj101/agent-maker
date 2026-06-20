@@ -32,55 +32,47 @@ export function WizardShell() {
   const isFirst = stepIndex === 0;
   const isLast = stepIndex === WIZARD_STEPS.length - 1;
 
+  const btn = "rounded-token border border-border px-4 py-2 text-sm font-medium transition";
+  const btnPrimary =
+    "rounded-token bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-[var(--accent-strong)]";
+
   return (
-    <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 px-4 py-8 lg:grid-cols-[220px_1fr_300px]">
+    <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 px-4 py-8 lg:grid-cols-[208px_1fr_300px]">
       {/* 좌: 스텝퍼 */}
-      <aside className="lg:sticky lg:top-8 lg:self-start">
+      <aside className="lg:sticky lg:top-16 lg:self-start">
         <Stepper />
       </aside>
 
       {/* 중: 현재 스텝 */}
-      <section aria-labelledby="step-title">
-        <header className="mb-5">
-          <p className="text-xs font-medium text-muted">
-            단계 {stepIndex} / {WIZARD_STEPS.length - 1}
+      <section aria-labelledby="step-title" className="min-w-0">
+        <header className="mb-6 border-b border-hairline pb-4">
+          <p className="eyebrow">
+            step {String(stepIndex).padStart(2, "0")} / {String(WIZARD_STEPS.length - 1).padStart(2, "0")}
           </p>
-          <h1 id="step-title" className="text-2xl font-bold">
+          <h1 id="step-title" className="mt-2 text-xl font-semibold tracking-tight">
             {step.title}
           </h1>
-          <p className="mt-1 text-sm text-muted">{step.summary}</p>
+          <p className="mt-1 text-[13px] text-muted">{step.summary}</p>
         </header>
 
         <StepContent stepIndex={stepIndex} />
 
-        <div className="mt-8 flex items-center justify-between border-t border-border pt-4">
-          <button
-            type="button"
-            onClick={prev}
-            disabled={isFirst}
-            className="rounded-md border border-border px-4 py-2 text-sm font-medium disabled:opacity-40"
-          >
+        <div className="mt-8 flex items-center justify-between border-t border-hairline pt-4">
+          <button type="button" onClick={prev} disabled={isFirst} className={`${btn} disabled:opacity-40`} style={{ borderRadius: "var(--radius)" }}>
             이전
           </button>
           <span className="flex items-center gap-3 text-xs text-muted" aria-live="polite">
-            변경사항은 자동 저장됩니다
-            <button type="button" onClick={reset} className="underline hover:text-foreground">
+            <span className="mono text-[var(--accent)]">●</span> 자동 저장됨
+            <button type="button" onClick={reset} className="underline underline-offset-2 hover:text-foreground">
               초기화
             </button>
           </span>
           {isLast ? (
-            <Link
-              href="/wizard/review"
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-            >
+            <Link href="/wizard/review" className={btnPrimary} style={{ borderRadius: "var(--radius)" }}>
               검토 &amp; 내보내기 →
             </Link>
           ) : (
-            <button
-              type="button"
-              onClick={next}
-              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
-            >
+            <button type="button" onClick={next} className={btnPrimary} style={{ borderRadius: "var(--radius)" }}>
               다음
             </button>
           )}
@@ -88,7 +80,9 @@ export function WizardShell() {
       </section>
 
       {/* 우: 미리보기 */}
-      <aside className="lg:sticky lg:top-8 lg:self-start rounded-lg border border-border bg-surface p-4">
+      <aside
+        className="rounded-lg border border-border bg-surface p-4 lg:sticky lg:top-16 lg:self-start"
+      >
         <PreviewPanel />
       </aside>
     </div>

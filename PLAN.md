@@ -340,6 +340,7 @@ AgentSpec {
 - ✅ ZIP 라이브러리 = **fflate** 확정 (M2). 근거: 의존성 0·번들 매우 작음·빠름·트리셰이킹(클라이언트/폐쇄망 친화). `bundleToZip`에 격리되어 교체 용이.
 - ✅ 상태 관리 = **Zustand** 확정 (M3). 근거: 단일 큰 `AgentSpec`을 여러 스텝이 슬라이스로 갱신 + localStorage 자동저장에 최적, `persist` 내장(서버 불필요·폐쇄망 친화), provider 보일러플레이트 없음(~1KB).
 - ✅ UI = **커스텀 Tailwind 컴포넌트** 확정 (M4). shadcn/ui·Radix 프레임워크는 미도입(핵심이 커스텀 시각물). 접근성 프리미티브(탭/다이얼로그)가 필요한 곳만 추후 `@radix-ui/*` 최소 도입.
+- ✅ **앱 디자인 방향 = 절제된 개발자 도구형 + 딥 틸**(사용자 확정). 토큰 시스템 `src/app/globals.css`, 문서 `docs/app-design.md`. mono 'spec' 모티프·헤어라인·컴팩트. (산출물 챗봇 DESIGN.md 와 별개)
 
 **여전히 열려 있는 항목:**
 - ✅ 마법사 배포 타깃 = **정적 export 확정**(M6, `output: "export"`). 폐쇄망 배포 시 `out/` 정적 파일 서빙.

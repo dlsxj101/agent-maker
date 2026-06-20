@@ -45,21 +45,27 @@ export function Review() {
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">검토 &amp; 내보내기</h1>
-        <Link href="/wizard" className="text-sm text-muted underline">
-          ← 마법사로 돌아가기
+      <div className="mb-6 flex items-end justify-between border-b border-hairline pb-4">
+        <div>
+          <p className="eyebrow">review · export</p>
+          <h1 className="mt-2 text-xl font-semibold tracking-tight">검토 &amp; 내보내기</h1>
+        </div>
+        <Link href="/wizard" className="text-sm text-muted underline underline-offset-2 hover:text-foreground">
+          ← 마법사로
         </Link>
       </div>
 
       {/* 게이트: 필수 누락 */}
       {missing.length > 0 && (
-        <div className="mb-4 rounded-md border border-red-300 bg-red-50 p-4 text-sm text-red-700">
+        <div
+          className="mb-4 p-4 text-sm"
+          style={{ background: "var(--danger-weak)", color: "var(--danger)", borderRadius: "var(--radius)" }}
+        >
           <p className="font-medium">필수 입력이 비어 있어 내보낼 수 없습니다.</p>
           <ul className="mt-1 list-disc pl-5">
             {missing.map((m) => (
               <li key={m.label}>
-                {m.label} <span className="text-xs">({m.section})</span>
+                {m.label} <span className="mono text-xs">({m.section})</span>
               </li>
             ))}
           </ul>
@@ -68,12 +74,15 @@ export function Review() {
 
       {/* 충돌 경고 */}
       {conflicts.length > 0 && (
-        <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
+        <div
+          className="mb-4 p-4 text-sm"
+          style={{ background: "var(--warn-weak)", color: "var(--warn)", borderRadius: "var(--radius)" }}
+        >
           <p className="font-medium">충돌 경고 ({conflicts.length}) — 내보내기는 가능하나 검토 권장</p>
           <ul className="mt-1 space-y-1">
             {conflicts.map((c) => (
               <li key={c.id}>
-                <span className="font-mono text-xs">{c.id}</span> {c.message}
+                <span className="mono text-xs">{c.id}</span> {c.message}
               </li>
             ))}
           </ul>
@@ -81,7 +90,7 @@ export function Review() {
       )}
 
       {/* 비용 추정 */}
-      <div className="mb-4 rounded-md border border-border bg-surface p-4 text-sm">
+      <div className="mb-4 rounded-lg border border-border bg-surface p-4 text-sm">
         <p className="font-medium">월 비용 추정</p>
         {cost.available ? (
           <p className="mt-1">
@@ -99,23 +108,26 @@ export function Review() {
         )}
       </div>
 
-      {/* 파일 미리보기 */}
-      <div className="rounded-lg border border-border">
-        <div className="flex flex-wrap gap-1 border-b border-border p-2">
-          {artifacts.map((f) => (
-            <button
-              key={f.path}
-              type="button"
-              onClick={() => setSelected(f.path)}
-              className={`rounded px-2 py-1 text-xs font-mono ${
-                f.path === current?.path ? "bg-primary text-primary-foreground" : "text-muted hover:bg-surface"
-              }`}
-            >
-              {f.path}
-            </button>
-          ))}
+      {/* 파일 미리보기 (에디터 톤) */}
+      <div className="overflow-hidden rounded-lg border border-border">
+        <div className="flex flex-wrap gap-0.5 border-b border-hairline bg-surface-2 p-1.5">
+          {artifacts.map((f) => {
+            const on = f.path === current?.path;
+            return (
+              <button
+                key={f.path}
+                type="button"
+                onClick={() => setSelected(f.path)}
+                className={`mono rounded-[4px] px-2 py-1 text-[11px] transition ${
+                  on ? "bg-primary text-primary-foreground" : "text-muted hover:bg-surface"
+                }`}
+              >
+                {f.path}
+              </button>
+            );
+          })}
         </div>
-        <pre className="max-h-[420px] overflow-auto p-4 text-xs leading-relaxed">
+        <pre className="mono max-h-[440px] overflow-auto bg-surface p-4 text-[12px] leading-[1.7]">
           <code>{current?.contents}</code>
         </pre>
       </div>
@@ -126,7 +138,8 @@ export function Review() {
           type="button"
           onClick={onExport}
           disabled={!ready}
-          className="rounded-md bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-token bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-40"
+          style={{ borderRadius: "var(--radius)" }}
         >
           ZIP 내보내기
         </button>

@@ -20,7 +20,7 @@ export function PreviewPanel() {
 
   return (
     <div className="space-y-5 text-sm">
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted">미리보기 / 요약</h2>
+      <p className="eyebrow">live preview</p>
 
       <ChatPreview />
 
@@ -46,7 +46,10 @@ export function PreviewPanel() {
       </div>
 
       {missing.length > 0 && (
-        <div className="rounded-md border border-red-300 bg-red-50 p-3 text-red-700">
+        <div
+          className="rounded-token p-3"
+          style={{ background: "var(--danger-weak)", color: "var(--danger)", borderRadius: "var(--radius)" }}
+        >
           <p className="font-medium">필수 입력 누락 ({missing.length})</p>
           <ul className="mt-1 list-disc pl-4">
             {missing.map((m) => (
@@ -57,12 +60,15 @@ export function PreviewPanel() {
       )}
 
       {conflicts.length > 0 && (
-        <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-amber-800">
+        <div
+          className="rounded-token p-3"
+          style={{ background: "var(--warn-weak)", color: "var(--warn)", borderRadius: "var(--radius)" }}
+        >
           <p className="font-medium">충돌 경고 ({conflicts.length})</p>
           <ul className="mt-1 space-y-1">
             {conflicts.map((c) => (
               <li key={c.id}>
-                <span className="font-mono text-xs">{c.id}</span> {c.message}
+                <span className="mono text-xs">{c.id}</span> {c.message}
               </li>
             ))}
           </ul>
@@ -70,7 +76,10 @@ export function PreviewPanel() {
       )}
 
       {missing.length === 0 && conflicts.length === 0 && (
-        <p className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-emerald-700">
+        <p
+          className="rounded-token p-3"
+          style={{ background: "var(--accent-weak)", color: "var(--accent-strong)", borderRadius: "var(--radius)" }}
+        >
           충돌·누락 없음 — 내보내기 준비됨.
         </p>
       )}
