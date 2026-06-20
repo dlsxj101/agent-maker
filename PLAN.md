@@ -296,10 +296,12 @@ AgentSpec {
     - 감사 로그 미들웨어·PII 마스킹 stub(플래그 조건부) + HWP·온프레미스 임베딩 서빙 안내(PROMPT/ARCHITECTURE)
   - ⏭️ 잔여(차기): 실제 RAG/임베딩/HWP 구현 깊이는 대상 챗봇 구현 영역. M6 전 범위 재검증 시 airgap 프로필도 게이트.
 
-- **M3 — 마법사 셸 & 상태**
-  - 0번 작업: **상태관리 라이브러리 확정**(Zustand vs Context+reducer)
-  - 스텝퍼/라우팅/store/자동 저장(localStorage)/이전·다음/검증
-  - 충돌 감지 엔진 **골격**(규칙 1~2개) 착수 (스키마를 알면 가능)
+- **M3 — 마법사 셸 & 상태** ✅ *(완료)*
+  - ✅ 0번 작업: **상태관리 = Zustand 확정**. `persist` 미들웨어로 localStorage 자동 저장 (`src/lib/store.ts`)
+  - ✅ 셸 3단 레이아웃(좌 스텝퍼 / 중 스텝 폼 / 우 미리보기), 이전·다음, 스텝 클릭 이동, 자동 저장, 하이드레이션 가드 (`src/components/wizard/*`, `/wizard` 라우트, 랜딩 진입 버튼)
+  - ✅ 슬라이스 3단계(project/design/llm)는 동작하는 기본 폼(카탈로그 주도), 나머지는 자리표시자(폼은 M5)
+  - ✅ 충돌 감지 엔진(`src/lib/conflicts.ts`) — 대표 규칙 C1·C2·C3·C5·C8·C9·C11 + 준비도 점검(`readiness.ts`). 스텝퍼 배지·미리보기 경고로 노출. 단위 테스트 10케이스.
+  - ⏭️ 나머지 충돌 규칙(C4·C6·C7·C10)·export 차단 게이트 완성은 M5.
 
 - **M4 — 시각적 선택 UI (★제품 차별점)**
   - 0번 작업: **UI 라이브러리 확정**(shadcn/ui vs Radix)
@@ -331,7 +333,7 @@ AgentSpec {
 
 **마일스톤에 결정 시점이 묶인 항목** (해당 M의 0번 작업으로 확정):
 - ✅ ZIP 라이브러리 = **fflate** 확정 (M2). 근거: 의존성 0·번들 매우 작음·빠름·트리셰이킹(클라이언트/폐쇄망 친화). `bundleToZip`에 격리되어 교체 용이.
-- 상태 관리 라이브러리 (Zustand vs Context+reducer) → **M3 0번 작업**
+- ✅ 상태 관리 = **Zustand** 확정 (M3). 근거: 단일 큰 `AgentSpec`을 여러 스텝이 슬라이스로 갱신 + localStorage 자동저장에 최적, `persist` 내장(서버 불필요·폐쇄망 친화), provider 보일러플레이트 없음(~1KB).
 - UI 라이브러리 (shadcn/ui vs Radix) → **M4 0번 작업**
 
 **여전히 열려 있는 항목:**

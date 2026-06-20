@@ -1,0 +1,82 @@
+/**
+ * 충돌 감지 / 준비도 점검 테스트 (PLAN.md §7, M3).
+ */
+
+import { describe, it, expect } from "vitest";
+import { createDraftSpec } from "@/lib/agent-spec";
+import { detectConflicts } from "@/lib/conflicts";
+import { getMissingRequired, isExportReady } from "@/lib/readiness";
+import { cloudSpec, airgapSpec } from "@/generators/fixtures";
+
+const ids = (spec: ReturnType<typeof createDraftSpec>) =>
+  detectConflicts(spec).map((c) => c.id);
+
+describe("detectConflicts", () => {
+  it("airgap + 공식 API + 클라우드 임베딩이면 C1·C2 를 잡는다", () => {
+    const spec = createDraftSpec({
+      project: { org: "A", name: "B", deployEnv: "on-premise-airgap" },
+      llm: { serving: "official-api" },
+      rag: { enabled: true, embedding: "openai-text-embedding-3-large", sources: ["upload-hwp"] },
+    });
+    const got = ids(spec);
+    expect(got).toContain("C1");
+    expect(got).toContain("C2");
+  });
+
+  it("offline 백엔드 + 외부 API 면 C3", () => {
+    const spec = createDraftSpec({
+      backend: { network: "offline" },
+      integrations: { apis: [{ name: "민원API", auth: "api-key" }] },
+    });
+    expect(ids(spec)).toContain("C3");
+  });
+
+  it("RAG 사용 + HWP 없음이면 C5", () => {
+    const spec = createDraftSpec({ rag: { enabled: true, sources: ["upload-pdf"] } });
+    expect(ids(spec)).toContain("C5");
+  });
+
+  it("RAG 사용 + 인텐트 없음이면 C8", () => {
+    const spec = createDraftSpec({ rag: { enabled: true, sources: ["upload-hwp"] } });
+    expect(ids(spec)).toContain("C8");
+  });
+
+  it("민원 용도 + 상담사 연결 없음이면 C9", () => {
+    const spec = createDraftSpec({
+      project: { org: "A", name: "B", purpose: ["civil-complaint"] },
+    });
+    expect(ids(spec)).toContain("C9");
+  });
+
+  it("다국어 + i18n 미설정이면 C11", () => {
+    const spec = createDraftSpec({ project: { org: "A", name: "B", languages: ["multi"] } });
+    expect(ids(spec)).toContain("C11");
+  });
+
+  it("cloud 픽스처(정상 구성)는 airgap 전용 충돌(C1·C2·C3)을 내지 않는다", () => {
+    const got = ids(cloudSpec);
+    expect(got).not.toContain("C1");
+    expect(got).not.toContain("C2");
+    expect(got).not.toContain("C3");
+  });
+
+  it("airgap 픽스처는 온프레미스 구성이라 C1·C2 를 내지 않는다", () => {
+    const got = ids(airgapSpec);
+    expect(got).not.toContain("C1"); // bge-m3 = 온프레미스 임베딩
+    expect(got).not.toContain("C2"); // self-hosted
+  });
+});
+
+describe("getMissingRequired / isExportReady", () => {
+  it("기본 초안은 기관명·챗봇명이 비어 export 준비 안 됨", () => {
+    const spec = createDraftSpec();
+    const missing = getMissingRequired(spec).map((m) => m.label);
+    expect(missing).toContain("기관명");
+    expect(missing).toContain("챗봇 명칭");
+    expect(isExportReady(spec)).toBe(false);
+  });
+
+  it("필수 입력이 채워진 cloud 픽스처는 export 준비됨", () => {
+    expect(isExportReady(cloudSpec)).toBe(true);
+  });
+});

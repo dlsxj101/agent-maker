@@ -1,15 +1,15 @@
+import Link from "next/link";
 import { WIZARD_STEPS } from "@/catalog/steps";
 
 /**
- * 랜딩 페이지 (골격).
- * 마법사 UI는 아직 구현 전이며, 이 페이지는 프로젝트 개요와 단계 목록만 보여준다.
+ * 랜딩 페이지. 프로젝트 개요 + 단계 목록 + 마법사 진입.
  * 로드맵: PLAN.md §8
  */
 export default function Home() {
   return (
     <main className="mx-auto max-w-3xl px-6 py-16">
       <span className="inline-block rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-muted">
-        프로젝트 세팅 단계 (M0) · 마법사 기능 구현 예정
+        마법사 셸 · 상태 단계 (M3) · 시각적 선택 UI 확장 예정
       </span>
 
       <h1 className="mt-6 text-4xl font-bold tracking-tight">agent-maker</h1>
@@ -18,6 +18,13 @@ export default function Home() {
         테마·스택·RAG·LLM·API·컴플라이언스를 보면서 선택하면, Claude Code가 한 번에 챗봇을
         구현할 수 있는 산출물 묶음(ZIP)을 만들어 줍니다.
       </p>
+
+      <Link
+        href="/wizard"
+        className="mt-8 inline-block rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground"
+      >
+        마법사 시작하기 →
+      </Link>
 
       <section className="mt-12">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
