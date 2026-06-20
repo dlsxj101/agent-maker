@@ -59,7 +59,7 @@ export function renderPromptMd(spec: AgentSpec): string {
     `${n++}. **프로젝트 골격 확인**: 이 폴더의 \`agent-spec.json\`(정본), \`DESIGN.md\`, \`ARCHITECTURE.md\`, \`CLAUDE.md\`를 먼저 읽는다. 모든 결정은 \`agent-spec.json\`을 따른다.`,
   );
   steps.push(
-    `${n++}. **의존성 설치 & 기동 검증**: 동봉된 매니페스트로 의존성을 설치하고, 진입점(\`/health\`)이 떠서 200을 반환하는지 확인한다. 여기서 빌드/기동이 깨지면 먼저 고친다.`,
+    `${n++}. **의존성 설치 & 기동 검증**: 동봉된 매니페스트로 의존성을 설치하고, 진입점(\`/health\`)이 떠서 200을 반환하는지 확인한다. 여기서 빌드/기동이 깨지면 먼저 고친다. **테스트/오프라인 환경에서는 \`LLM_STUB=true\`로 실제 LLM 호출 없이 플러밍을 검증**하고, 실제 키(예: \`ANTHROPIC_API_KEY\`)는 \`.env\`에 둔다.`,
   );
   steps.push(
     `${n++}. **디자인 토큰 적용**: \`DESIGN.md\`의 컬러/폰트/위젯 토큰을 UI에 반영한다. 색은 직접 hex가 아니라 CSS 변수로 쓴다. 레이아웃은 "${label(
@@ -68,6 +68,17 @@ export function renderPromptMd(spec: AgentSpec): string {
     )}".`,
   );
   if (ragOn) {
+    const ragExtra: string[] = [];
+    if (spec.rag.sources.includes("upload-hwp")) {
+      ragExtra.push(
+        "HWP(한글)는 표준 Node 파서가 없으므로 변환 전략(libreoffice 변환 또는 hwp.js 등)을 먼저 정해 적재 단계에 반영한다.",
+      );
+    }
+    if (["bge-m3", "kure", "ko-sroberta", "multilingual-e5"].includes(spec.rag.embedding)) {
+      ragExtra.push(
+        `임베딩 \`${spec.rag.embedding}\`은 API가 아니라 별도 추론 서버가 필요하다 — \`EMBEDDING_API_URL\` 엔드포인트로 연결한다(ARCHITECTURE 참조).`,
+      );
+    }
     steps.push(
       `${n++}. **RAG 파이프라인 구현**: 적재→청킹(${label(
         "chunking",
@@ -77,7 +88,9 @@ export function renderPromptMd(spec: AgentSpec): string {
         spec.rag.vectorDb,
       )} 적재→검색(${label("retrieval", spec.rag.retrieval.strategy)}). 답변에는 출처/페이지를 ${
         spec.rag.citations ? "반드시 표기한다" : "표기하지 않는다"
-      }. RAG 골격 stub의 함수 시그니처를 채운다.`,
+      }. RAG 골격 stub(\`src/rag/pipeline.ts\`)의 함수 시그니처를 채운다. \`search()\`가 빈 결과를 그대로 반환하지 않도록 한다.${
+        ragExtra.length ? " " + ragExtra.join(" ") : ""
+      }`,
     );
   }
   steps.push(
@@ -103,7 +116,11 @@ export function renderPromptMd(spec: AgentSpec): string {
     `${n++}. **컴플라이언스 점검**: 접근성(${label(
       "a11yLevel",
       spec.frontend.a11yLevel,
-    )}), 개인정보 마스킹, 감사 로그를 최종 확인한다.`,
+    )}), 개인정보 마스킹(${yesno(
+      spec.compliance.privacy.collectsPii && spec.compliance.privacy.masking,
+    )}), 감사 로그(${yesno(
+      spec.backend.logging.audit || spec.ops.audit,
+    )})를 최종 확인한다. 동봉된 감사 로그 미들웨어·마스킹 유틸 stub을 실제 정책에 맞게 채운다.`,
   );
 
   return `# 구현 지시 (Claude Code 마스터 프롬프트)
@@ -289,6 +306,11 @@ export function renderArchitectureMd(spec: AgentSpec): string {
 ## RAG 파이프라인
 
 ${ragFlow}
+${
+    ragOn && ["bge-m3", "kure", "ko-sroberta", "multilingual-e5"].includes(spec.rag.embedding)
+      ? `\n> 임베딩 \`${spec.rag.embedding}\`은 클라우드 API가 아니라 **추론 서버**가 필요하다. 별도 컨테이너/서버로 띄우고 \`EMBEDDING_API_URL\`로 연결한다. 폐쇄망에서는 오프라인 설치 패키지에 모델 가중치를 포함한다.\n`
+      : ""
+}
 
 ## 보안 · 컴플라이언스
 

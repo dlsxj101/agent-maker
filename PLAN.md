@@ -280,14 +280,21 @@ AgentSpec {
   - **기본값/필수 2단 설계**: 스키마는 전 필드 기본값 부여(`parse({})` → 완전한 초안 생성, 마법사 초기상태·localStorage·round-trip 용이). "필수 필드가 비어 있으면 export 차단"하는 게이트는 별도 준비도 검사로 **M5 Review에서** 구현(`createDraftSpec`/`serializeSpec`/`deserializeSpec` 헬퍼 제공).
   - Zod 4 메모: 중첩 객체 기본값은 `.default({})`(원시 `{}` 반환, 내부 기본값 미적용)가 아니라 **`.prefault({})`**(기본값을 스키마로 파싱)를 써야 내부 기본값이 재귀 적용된다.
 
-- **M2 — 산출물 생성기 + E2E 검증 (★수직 슬라이스의 핵심)** 🔄 *(생성기·ZIP·스냅샷·기계적 기동 검증 완료 / 에이전트 E2E 게이트 남음)*
+- **M2 — 산출물 생성기 + E2E 검증 (★수직 슬라이스의 핵심)** ✅ *(완료 — 에이전트 E2E 게이트 통과 + 피드백 반영)*
   - ✅ 0번 작업: **ZIP 라이브러리 = fflate** 확정 (`src/generators/index.ts`, `bundleToZip`/`bundleToZipBytes`)
   - ✅ 손으로 쓴 샘플 `AgentSpec` 픽스처(cloud/airgap, `src/generators/fixtures.ts`) → 생성기 → 문서 6종 + **스캐폴딩 코드**(Node/TS 백엔드 + 토큰 적용 채팅 UI + RAG/LLM 골격 + 평가 테스트) + ZIP
     - 생성기 모듈: `format.ts`(한글 라벨) · `tokens.ts`(디자인 토큰/CSS 변수) · `docs.ts`(PROMPT/DESIGN/CLAUDE/ARCHITECTURE/README) · `scaffold.ts` · `index.ts`(오케스트레이터)
   - ✅ 골든 산출물 **스냅샷 테스트** + 결정성/제약반영/ZIP round-trip 테스트 (`generators.test.ts`, 22 케이스 통과)
   - ✅ **기계적 기동 검증**: 생성 ZIP 해제 → `npm install` → `tsc` 빌드 → 서버 기동 → `/health` 200 확인.
     (스캐폴드가 컴파일/기동되는 최소 골격임을 증명. LLM 클라이언트는 지연 초기화 → 키 없이도 `/health` 기동.)
-  - 🔄 **에이전트 E2E 게이트 (남음):** ZIP을 빈 폴더에 풀어 **실제 Claude Code로 챗봇 1개를 끝까지 구현**(비즈니스 로직 채우기)해 보는 `export-verify` 게이트. 실패 시 PROMPT/스키마/템플릿으로 피드백.
+  - ✅ **에이전트 E2E 게이트 통과:** cloud 프로필 ZIP을 격리 폴더에 풀어 Sonnet 서브에이전트가 `PROMPT.md`만으로 구현 시도 → 빌드/기동/골든셋(LLM_STUB) 통과 확인. acceptance 4종(착수·기동·골든셋·결정성) 충족.
+  - ✅ **피드백 루프 반영(게이트 발견 → 생성기 개선):**
+    - LLM **스텁 모드**(`LLM_STUB=true`) 추가 → 키 없이 골든셋 플러밍 검증 가능 (scaffold + PROMPT + .env.example)
+    - `design.layout` 을 채팅 컨테이너 CSS 에 반영(floating-widget/side-panel/full-page)
+    - 골든 테스트가 `expectedSource` 기반 실제 합격 기준(`it.todo`)을 노출
+    - `search()` 무음 빈 반환 → 경고 로그 / express 핸들러 반환 정리
+    - 감사 로그 미들웨어·PII 마스킹 stub(플래그 조건부) + HWP·온프레미스 임베딩 서빙 안내(PROMPT/ARCHITECTURE)
+  - ⏭️ 잔여(차기): 실제 RAG/임베딩/HWP 구현 깊이는 대상 챗봇 구현 영역. M6 전 범위 재검증 시 airgap 프로필도 게이트.
 
 - **M3 — 마법사 셸 & 상태**
   - 0번 작업: **상태관리 라이브러리 확정**(Zustand vs Context+reducer)

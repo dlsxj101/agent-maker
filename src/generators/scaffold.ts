@@ -11,8 +11,13 @@ import type { GeneratedFile } from "./index";
 import { designTokens, tokensToCss } from "./tokens";
 
 /** 선택에 따라 필요한 환경변수 목록(placeholder)을 계산 */
+/** API 키 없이 추론 서버가 필요한 온프레미스 임베딩 모델 */
+const ONPREM_EMBEDDINGS = ["bge-m3", "kure", "ko-sroberta", "multilingual-e5"];
+
 function envEntries(spec: AgentSpec): string[] {
   const env: string[] = ["# 자동 생성된 환경변수 목록 — 실제 값으로 채운다", "PORT=3000"];
+  env.push("# 테스트/오프라인: true 면 LLM 호출 없이 스텁 응답 사용");
+  env.push("LLM_STUB=false");
   if (spec.llm.serving === "self-hosted" || spec.llm.serving === "proxy") {
     env.push("LLM_BASE_URL=http://localhost:8000/v1");
   } else if (spec.llm.provider === "claude") {
@@ -26,6 +31,10 @@ function envEntries(spec: AgentSpec): string[] {
     if (spec.rag.vectorDb === "qdrant") env.push("QDRANT_URL=http://localhost:6333");
     if (spec.rag.vectorDb === "milvus") env.push("MILVUS_URI=http://localhost:19530");
     env.push(`EMBEDDING_MODEL=${spec.rag.embedding}`);
+    if (ONPREM_EMBEDDINGS.includes(spec.rag.embedding)) {
+      env.push("# 온프레미스 임베딩은 API 가 아니라 추론 서버가 필요하다 (ARCHITECTURE.md)");
+      env.push("EMBEDDING_API_URL=http://localhost:8080/embed");
+    }
   }
   return env;
 }
@@ -73,7 +82,17 @@ const TSCONFIG = `{
 }
 `;
 
-function serverTs(): string {
+function serverTs(spec: AgentSpec): string {
+  const audit = spec.backend.logging.audit || spec.ops.audit;
+  const auditMw = audit
+    ? `
+// 감사 로그 미들웨어 (audit=true) — TODO: 보관소/포맷을 기관 정책에 맞게 (개인정보 주의)
+app.use((req, _res, next) => {
+  console.log(JSON.stringify({ ts: new Date().toISOString(), method: req.method, path: req.path }));
+  next();
+});
+`
+    : "";
   return `// 진입점 — 헬스체크 + 채팅 API 골격. (PROMPT.md 지시에 따라 로직을 채운다)
 import express from "express";
 import { answer } from "./chat.js";
@@ -81,7 +100,7 @@ import { answer } from "./chat.js";
 const app = express();
 app.use(express.json());
 app.use(express.static("public"));
-
+${auditMw}
 // 헬스체크 (acceptance: 200 반환)
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
@@ -89,12 +108,13 @@ app.get("/health", (_req, res) => res.json({ status: "ok" }));
 app.post("/api/chat", async (req, res) => {
   const { message } = req.body ?? {};
   if (typeof message !== "string" || !message.trim()) {
-    return res.status(400).json({ error: "message 가 필요합니다." });
+    res.status(400).json({ error: "message 가 필요합니다." });
+    return;
   }
   try {
     const result = await answer(message);
     res.json(result);
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: "처리 중 오류가 발생했습니다." });
   }
 });
@@ -110,20 +130,39 @@ function chatTs(spec: AgentSpec): string {
     ? `  const contexts = await search(message); // TODO: 검색 결과로 컨텍스트 구성\n`
     : "  const contexts: string[] = [];\n";
   const citationNote = spec.rag.citations
-    ? '  // TODO: 답변에 출처/페이지를 표기한다 (citations=true).\n'
+    ? "  // 출처 표기(citations=true): sources 를 답변과 함께 노출한다.\n"
     : "";
+  const masking = spec.compliance.privacy.collectsPii && spec.compliance.privacy.masking;
+  const maskUtil = masking
+    ? `
+// 개인정보 마스킹 (collectsPii && masking) — TODO: 기관 정책에 맞게 보강
+function maskPii(text: string): string {
+  return text
+    .replace(/\\d{6}-\\d{7}/g, "******-*******") // 주민등록번호
+    .replace(/01[016789]-?\\d{3,4}-?\\d{4}/g, "***-****-****"); // 휴대전화
+}
+`
+    : "";
+  const maskApply = masking ? "  const safe = maskPii(text);\n" : "  const safe = text;\n";
   return `// 채팅 오케스트레이션 골격: (RAG 검색) → LLM 호출.
 ${ragImport}import { complete } from "./llm/client.js";
 
-const PERSONA_TONE = "${spec.conversation.persona.tone}"; // 답변 톤
 const GROUNDED_ONLY = ${spec.llm.guardrails.groundedOnly}; // 근거 기반 답변 강제
+// 테스트/오프라인 환경: LLM_STUB=true 면 실제 LLM 호출 없이 결정적 스텁 응답을 쓴다.
+const STUB = process.env.LLM_STUB === "true";
 
 export async function answer(message: string): Promise<{ answer: string; sources: string[] }> {
 ${ragCall}${citationNote}  const system = buildSystemPrompt(contexts);
-  const text = await complete(system, message);
-  return { answer: text, sources: contexts };
+  const text = STUB ? stubAnswer(message, contexts) : await complete(system, message);
+${maskApply}  return { answer: safe, sources: contexts };
 }
 
+function stubAnswer(message: string, contexts: string[]): string {
+  // 결정적 스텁 — 골든셋 플러밍 테스트용. 실제 동작은 complete() 가 담당한다.
+  const cite = contexts.length ? " (참고: " + contexts.join(", ") + ")" : "";
+  return '[STUB] "' + message + '" 문의에 대한 안내입니다.' + cite;
+}
+${maskUtil}
 function buildSystemPrompt(contexts: string[]): string {
   // TODO: agent-spec.json 의 conversation.persona.systemPrompt 를 반영한다.
   return [
@@ -214,6 +253,7 @@ export async function index(_chunks: Chunk[]): Promise<void> {
 /** 4) 검색 (${spec.rag.retrieval.strategy}) — 질문과 관련된 컨텍스트 텍스트 반환 */
 export async function search(_query: string): Promise<string[]> {
   // TODO: ${spec.rag.vectorDb} 에서 top-k 검색
+  console.warn("[rag] search() 미구현 — 빈 컨텍스트 반환. ${spec.rag.vectorDb} 연결을 구현하세요.");
   return [];
 }
 `;
@@ -278,13 +318,22 @@ form.addEventListener("submit", async (e) => {
 `;
 
 function stylesCss(spec: AgentSpec): string {
+  // 레이아웃(design.layout)을 컨테이너 CSS 로 반영한다.
+  const layoutCss =
+    spec.design.layout === "floating-widget"
+      ? ".chat { position: fixed; bottom: 24px; right: 24px; width: 360px; height: 520px; max-height: 80vh; box-shadow: 0 8px 30px rgba(0,0,0,.18); border-radius: 16px; overflow: hidden; }"
+      : spec.design.layout === "side-panel"
+        ? ".chat { position: fixed; top: 0; right: 0; width: 380px; height: 100vh; box-shadow: -4px 0 20px rgba(0,0,0,.12); }"
+        : ".chat { max-width: 480px; margin: 0 auto; height: 100vh; }"; // full-page / iframe-embed
   return `${tokensToCss(designTokens(spec))}
 
 * { box-sizing: border-box; }
 body { margin: 0; font-family: var(--font-body); color: var(--color-text); background: var(--color-background); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
-.chat { max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; height: 100vh; }
+/* 레이아웃: ${spec.design.layout} */
+${layoutCss}
+.chat { display: flex; flex-direction: column; background: var(--color-background); }
 .chat__header { font-family: var(--font-heading); font-weight: 700; padding: 16px; background: var(--color-primary); color: #fff; }
 .chat__log { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; background: var(--color-surface); }
 .bubble { max-width: 80%; padding: 10px 14px; border-radius: var(--bubble-radius); line-height: 1.5; }
@@ -303,24 +352,37 @@ function goldenTest(spec: AgentSpec): string {
       ? spec.evaluation.testset
       : [{ question: "(골든셋이 비어 있음 — agent-spec.json 의 evaluation.testset 을 채운다)" }];
   const rows = cases
-    .map((c) => `  { question: ${JSON.stringify(c.question)} },`)
+    .map(
+      (c) =>
+        `  { question: ${JSON.stringify(c.question)}, expectedSource: ${JSON.stringify(
+          c.expectedSource ?? null,
+        )} },`,
+    )
     .join("\n");
   return `// 평가 골든셋 테스트 골격. (acceptance: 통과해야 납품 가능)
 // 지표: ${spec.evaluation.metrics.join(", ") || "(미선택)"}
+// 실행: LLM_STUB=true 로 플러밍을 먼저 검증하고, 구현 완료 후 실제 LLM 으로 재검증한다.
 import { describe, it, expect } from "vitest";
 import { answer } from "../src/chat.js";
 
-const GOLDEN = [
+const GOLDEN: Array<{ question: string; expectedSource: string | null }> = [
 ${rows}
 ];
 
-describe("골든셋", () => {
+describe("골든셋 — 플러밍(LLM_STUB=true)", () => {
   for (const tc of GOLDEN) {
-    it("질문: " + tc.question, async () => {
+    it(tc.question, async () => {
       const res = await answer(tc.question);
-      // TODO: 기대 답변/근거(expectedAnswer/expectedSource)와 비교하도록 채운다.
       expect(typeof res.answer).toBe("string");
+      expect(res.answer.length).toBeGreaterThan(0);
     });
+  }
+});
+
+// 구현 완료 후 활성화할 실제 합격 기준(인용/근거 정확도).
+describe("골든셋 — 근거 정확도(구현 후)", () => {
+  for (const tc of GOLDEN.filter((t) => t.expectedSource)) {
+    it.todo(\`출처 포함: \${tc.question} → \${tc.expectedSource}\`);
   }
 });
 `;
@@ -349,7 +411,7 @@ export function generateScaffold(spec: AgentSpec, slug: string): GeneratedFile[]
   const files: GeneratedFile[] = [
     { path: "package.json", contents: packageJson(spec, slug) },
     { path: "tsconfig.json", contents: TSCONFIG },
-    { path: "src/server.ts", contents: serverTs() },
+    { path: "src/server.ts", contents: serverTs(spec) },
     { path: "src/chat.ts", contents: chatTs(spec) },
     { path: "src/llm/client.ts", contents: llmClientTs(spec) },
     { path: "public/index.html", contents: chatUiHtml(spec) },

@@ -4,11 +4,15 @@ exports[`골든 산출물 스냅샷 > airgap 프로필 전체 산출 스냅샷 1
 {
   ".env.example": "# 자동 생성된 환경변수 목록 — 실제 값으로 채운다
 PORT=3000
+# 테스트/오프라인: true 면 LLM 호출 없이 스텁 응답 사용
+LLM_STUB=false
 LLM_BASE_URL=http://localhost:8000/v1
 LLM_MODEL=exaone-3.5
 DATABASE_URL=
 QDRANT_URL=http://localhost:6333
 EMBEDDING_MODEL=bge-m3
+# 온프레미스 임베딩은 API 가 아니라 추론 서버가 필요하다 (ARCHITECTURE.md)
+EMBEDDING_API_URL=http://localhost:8080/embed
 ",
   ".gitignore": "node_modules/
 dist/
@@ -38,6 +42,9 @@ dist/
    ▼
 [LLM: EXAONE 3.5 (LG·국산)] ──▶ 답변 (+출처 표기)
 \`\`\`
+
+> 임베딩 \`bge-m3\`은 클라우드 API가 아니라 **추론 서버**가 필요하다. 별도 컨테이너/서버로 띄우고 \`EMBEDDING_API_URL\`로 연결한다. 폐쇄망에서는 오프라인 설치 패키지에 모델 가중치를 포함한다.
+
 
 ## 보안 · 컴플라이언스
 
@@ -187,13 +194,13 @@ CMD ["npm", "start"]
 ## 2. 구현 순서 (이 순서를 지킨다 — 각 단계 끝에서 검증)
 
 1. **프로젝트 골격 확인**: 이 폴더의 \`agent-spec.json\`(정본), \`DESIGN.md\`, \`ARCHITECTURE.md\`, \`CLAUDE.md\`를 먼저 읽는다. 모든 결정은 \`agent-spec.json\`을 따른다.
-2. **의존성 설치 & 기동 검증**: 동봉된 매니페스트로 의존성을 설치하고, 진입점(\`/health\`)이 떠서 200을 반환하는지 확인한다. 여기서 빌드/기동이 깨지면 먼저 고친다.
+2. **의존성 설치 & 기동 검증**: 동봉된 매니페스트로 의존성을 설치하고, 진입점(\`/health\`)이 떠서 200을 반환하는지 확인한다. 여기서 빌드/기동이 깨지면 먼저 고친다. **테스트/오프라인 환경에서는 \`LLM_STUB=true\`로 실제 LLM 호출 없이 플러밍을 검증**하고, 실제 키(예: \`ANTHROPIC_API_KEY\`)는 \`.env\`에 둔다.
 3. **디자인 토큰 적용**: \`DESIGN.md\`의 컬러/폰트/위젯 토큰을 UI에 반영한다. 색은 직접 hex가 아니라 CSS 변수로 쓴다. 레이아웃은 "전체 페이지형".
-4. **RAG 파이프라인 구현**: 적재→청킹(문단 단위)→임베딩(bge-m3)→Qdrant 적재→검색(하이브리드(BM25+벡터)). 답변에는 출처/페이지를 반드시 표기한다. RAG 골격 stub의 함수 시그니처를 채운다.
+4. **RAG 파이프라인 구현**: 적재→청킹(문단 단위)→임베딩(bge-m3)→Qdrant 적재→검색(하이브리드(BM25+벡터)). 답변에는 출처/페이지를 반드시 표기한다. RAG 골격 stub(\`src/rag/pipeline.ts\`)의 함수 시그니처를 채운다. \`search()\`가 빈 결과를 그대로 반환하지 않도록 한다. HWP(한글)는 표준 Node 파서가 없으므로 변환 전략(libreoffice 변환 또는 hwp.js 등)을 먼저 정해 적재 단계에 반영한다. 임베딩 \`bge-m3\`은 API가 아니라 별도 추론 서버가 필요하다 — \`EMBEDDING_API_URL\` 엔드포인트로 연결한다(ARCHITECTURE 참조).
 5. **LLM 연동**: 오픈소스/온프레미스 / 모델 EXAONE 3.5 (LG·국산) / 호출 방식 사내 추론 서버(vLLM/Ollama/TGI). 시스템 프롬프트는 간결 톤. 가드레일: 근거기반 예, 민감정보 필터 예.
 6. **대화 설계 반영**: 페르소나/인텐트/빠른응답/폴백(정중히 한계 안내)을 구현한다. 인텐트가 비어 있으면 \`agent-spec.json\`의 \`conversation\`을 보고 대표 시나리오를 먼저 정의한다.
 7. **평가 골든셋 검증**: 동봉된 테스트 골격(\`tests/\`)을 실행해 \`evaluation\` 골든셋을 통과시킨다. 통과 못 하면 RAG/프롬프트를 조정한다.
-8. **컴플라이언스 점검**: 접근성(KWCAG 2.2 AAA), 개인정보 마스킹, 감사 로그를 최종 확인한다.
+8. **컴플라이언스 점검**: 접근성(KWCAG 2.2 AAA), 개인정보 마스킹(아니오), 감사 로그(예)를 최종 확인한다. 동봉된 감사 로그 미들웨어·마스킹 유틸 stub을 실제 정책에 맞게 채운다.
 
 ## 3. 완료 기준 (acceptance)
 
@@ -480,7 +487,9 @@ form.addEventListener("submit", async (e) => {
 body { margin: 0; font-family: var(--font-body); color: var(--color-text); background: var(--color-background); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
-.chat { max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; height: 100vh; }
+/* 레이아웃: full-page */
+.chat { max-width: 480px; margin: 0 auto; height: 100vh; }
+.chat { display: flex; flex-direction: column; background: var(--color-background); }
 .chat__header { font-family: var(--font-heading); font-weight: 700; padding: 16px; background: var(--color-primary); color: #fff; }
 .chat__log { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; background: var(--color-surface); }
 .bubble { max-width: 80%; padding: 10px 14px; border-radius: var(--bubble-radius); line-height: 1.5; }
@@ -495,15 +504,23 @@ body { margin: 0; font-family: var(--font-body); color: var(--color-text); backg
 import { search } from "./rag/pipeline.js";
 import { complete } from "./llm/client.js";
 
-const PERSONA_TONE = "concise"; // 답변 톤
 const GROUNDED_ONLY = true; // 근거 기반 답변 강제
+// 테스트/오프라인 환경: LLM_STUB=true 면 실제 LLM 호출 없이 결정적 스텁 응답을 쓴다.
+const STUB = process.env.LLM_STUB === "true";
 
 export async function answer(message: string): Promise<{ answer: string; sources: string[] }> {
   const contexts = await search(message); // TODO: 검색 결과로 컨텍스트 구성
-  // TODO: 답변에 출처/페이지를 표기한다 (citations=true).
+  // 출처 표기(citations=true): sources 를 답변과 함께 노출한다.
   const system = buildSystemPrompt(contexts);
-  const text = await complete(system, message);
-  return { answer: text, sources: contexts };
+  const text = STUB ? stubAnswer(message, contexts) : await complete(system, message);
+  const safe = text;
+  return { answer: safe, sources: contexts };
+}
+
+function stubAnswer(message: string, contexts: string[]): string {
+  // 결정적 스텁 — 골든셋 플러밍 테스트용. 실제 동작은 complete() 가 담당한다.
+  const cite = contexts.length ? " (참고: " + contexts.join(", ") + ")" : "";
+  return '[STUB] "' + message + '" 문의에 대한 안내입니다.' + cite;
 }
 
 function buildSystemPrompt(contexts: string[]): string {
@@ -563,6 +580,7 @@ export async function index(_chunks: Chunk[]): Promise<void> {
 /** 4) 검색 (hybrid) — 질문과 관련된 컨텍스트 텍스트 반환 */
 export async function search(_query: string): Promise<string[]> {
   // TODO: qdrant 에서 top-k 검색
+  console.warn("[rag] search() 미구현 — 빈 컨텍스트 반환. qdrant 연결을 구현하세요.");
   return [];
 }
 ",
@@ -574,6 +592,12 @@ const app = express();
 app.use(express.json());
 app.use(express.static("public"));
 
+// 감사 로그 미들웨어 (audit=true) — TODO: 보관소/포맷을 기관 정책에 맞게 (개인정보 주의)
+app.use((req, _res, next) => {
+  console.log(JSON.stringify({ ts: new Date().toISOString(), method: req.method, path: req.path }));
+  next();
+});
+
 // 헬스체크 (acceptance: 200 반환)
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
@@ -581,12 +605,13 @@ app.get("/health", (_req, res) => res.json({ status: "ok" }));
 app.post("/api/chat", async (req, res) => {
   const { message } = req.body ?? {};
   if (typeof message !== "string" || !message.trim()) {
-    return res.status(400).json({ error: "message 가 필요합니다." });
+    res.status(400).json({ error: "message 가 필요합니다." });
+    return;
   }
   try {
     const result = await answer(message);
     res.json(result);
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: "처리 중 오류가 발생했습니다." });
   }
 });
@@ -596,20 +621,28 @@ app.listen(port, () => console.log(\`server on :\${port}\`));
 ",
   "tests/golden.test.ts": "// 평가 골든셋 테스트 골격. (acceptance: 통과해야 납품 가능)
 // 지표: (미선택)
+// 실행: LLM_STUB=true 로 플러밍을 먼저 검증하고, 구현 완료 후 실제 LLM 으로 재검증한다.
 import { describe, it, expect } from "vitest";
 import { answer } from "../src/chat.js";
 
-const GOLDEN = [
-  { question: "(골든셋이 비어 있음 — agent-spec.json 의 evaluation.testset 을 채운다)" },
+const GOLDEN: Array<{ question: string; expectedSource: string | null }> = [
+  { question: "(골든셋이 비어 있음 — agent-spec.json 의 evaluation.testset 을 채운다)", expectedSource: null },
 ];
 
-describe("골든셋", () => {
+describe("골든셋 — 플러밍(LLM_STUB=true)", () => {
   for (const tc of GOLDEN) {
-    it("질문: " + tc.question, async () => {
+    it(tc.question, async () => {
       const res = await answer(tc.question);
-      // TODO: 기대 답변/근거(expectedAnswer/expectedSource)와 비교하도록 채운다.
       expect(typeof res.answer).toBe("string");
+      expect(res.answer.length).toBeGreaterThan(0);
     });
+  }
+});
+
+// 구현 완료 후 활성화할 실제 합격 기준(인용/근거 정확도).
+describe("골든셋 — 근거 정확도(구현 후)", () => {
+  for (const tc of GOLDEN.filter((t) => t.expectedSource)) {
+    it.todo(\`출처 포함: \${tc.question} → \${tc.expectedSource}\`);
   }
 });
 ",
@@ -634,10 +667,14 @@ exports[`골든 산출물 스냅샷 > cloud 프로필 전체 산출 스냅샷 1`
 {
   ".env.example": "# 자동 생성된 환경변수 목록 — 실제 값으로 채운다
 PORT=3000
+# 테스트/오프라인: true 면 LLM 호출 없이 스텁 응답 사용
+LLM_STUB=false
 ANTHROPIC_API_KEY=
 LLM_MODEL=claude-sonnet-4-6
 DATABASE_URL=
 EMBEDDING_MODEL=bge-m3
+# 온프레미스 임베딩은 API 가 아니라 추론 서버가 필요하다 (ARCHITECTURE.md)
+EMBEDDING_API_URL=http://localhost:8080/embed
 ",
   ".gitignore": "node_modules/
 dist/
@@ -667,6 +704,9 @@ dist/
    ▼
 [LLM: Claude Sonnet 4.6] ──▶ 답변 (+출처 표기)
 \`\`\`
+
+> 임베딩 \`bge-m3\`은 클라우드 API가 아니라 **추론 서버**가 필요하다. 별도 컨테이너/서버로 띄우고 \`EMBEDDING_API_URL\`로 연결한다. 폐쇄망에서는 오프라인 설치 패키지에 모델 가중치를 포함한다.
+
 
 ## 보안 · 컴플라이언스
 
@@ -812,13 +852,13 @@ CMD ["npm", "start"]
 ## 2. 구현 순서 (이 순서를 지킨다 — 각 단계 끝에서 검증)
 
 1. **프로젝트 골격 확인**: 이 폴더의 \`agent-spec.json\`(정본), \`DESIGN.md\`, \`ARCHITECTURE.md\`, \`CLAUDE.md\`를 먼저 읽는다. 모든 결정은 \`agent-spec.json\`을 따른다.
-2. **의존성 설치 & 기동 검증**: 동봉된 매니페스트로 의존성을 설치하고, 진입점(\`/health\`)이 떠서 200을 반환하는지 확인한다. 여기서 빌드/기동이 깨지면 먼저 고친다.
+2. **의존성 설치 & 기동 검증**: 동봉된 매니페스트로 의존성을 설치하고, 진입점(\`/health\`)이 떠서 200을 반환하는지 확인한다. 여기서 빌드/기동이 깨지면 먼저 고친다. **테스트/오프라인 환경에서는 \`LLM_STUB=true\`로 실제 LLM 호출 없이 플러밍을 검증**하고, 실제 키(예: \`ANTHROPIC_API_KEY\`)는 \`.env\`에 둔다.
 3. **디자인 토큰 적용**: \`DESIGN.md\`의 컬러/폰트/위젯 토큰을 UI에 반영한다. 색은 직접 hex가 아니라 CSS 변수로 쓴다. 레이아웃은 "우하단 플로팅 위젯".
-4. **RAG 파이프라인 구현**: 적재→청킹(문단 단위)→임베딩(bge-m3)→pgvector 적재→검색(하이브리드(BM25+벡터)). 답변에는 출처/페이지를 반드시 표기한다. RAG 골격 stub의 함수 시그니처를 채운다.
+4. **RAG 파이프라인 구현**: 적재→청킹(문단 단위)→임베딩(bge-m3)→pgvector 적재→검색(하이브리드(BM25+벡터)). 답변에는 출처/페이지를 반드시 표기한다. RAG 골격 stub(\`src/rag/pipeline.ts\`)의 함수 시그니처를 채운다. \`search()\`가 빈 결과를 그대로 반환하지 않도록 한다. HWP(한글)는 표준 Node 파서가 없으므로 변환 전략(libreoffice 변환 또는 hwp.js 등)을 먼저 정해 적재 단계에 반영한다. 임베딩 \`bge-m3\`은 API가 아니라 별도 추론 서버가 필요하다 — \`EMBEDDING_API_URL\` 엔드포인트로 연결한다(ARCHITECTURE 참조).
 5. **LLM 연동**: Claude (Anthropic) / 모델 Claude Sonnet 4.6 / 호출 방식 공식 API. 시스템 프롬프트는 공손/격식 톤. 가드레일: 근거기반 예, 민감정보 필터 예.
 6. **대화 설계 반영**: 페르소나/인텐트/빠른응답/폴백(상담사 연결)을 구현한다. 인텐트가 비어 있으면 \`agent-spec.json\`의 \`conversation\`을 보고 대표 시나리오를 먼저 정의한다.
 7. **평가 골든셋 검증**: 동봉된 테스트 골격(\`tests/\`)을 실행해 \`evaluation\` 골든셋을 통과시킨다. 통과 못 하면 RAG/프롬프트를 조정한다.
-8. **컴플라이언스 점검**: 접근성(KWCAG 2.2 AA), 개인정보 마스킹, 감사 로그를 최종 확인한다.
+8. **컴플라이언스 점검**: 접근성(KWCAG 2.2 AA), 개인정보 마스킹(아니오), 감사 로그(예)를 최종 확인한다. 동봉된 감사 로그 미들웨어·마스킹 유틸 stub을 실제 정책에 맞게 채운다.
 
 ## 3. 완료 기준 (acceptance)
 
@@ -1118,7 +1158,9 @@ form.addEventListener("submit", async (e) => {
 body { margin: 0; font-family: var(--font-body); color: var(--color-text); background: var(--color-background); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 
-.chat { max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; height: 100vh; }
+/* 레이아웃: floating-widget */
+.chat { position: fixed; bottom: 24px; right: 24px; width: 360px; height: 520px; max-height: 80vh; box-shadow: 0 8px 30px rgba(0,0,0,.18); border-radius: 16px; overflow: hidden; }
+.chat { display: flex; flex-direction: column; background: var(--color-background); }
 .chat__header { font-family: var(--font-heading); font-weight: 700; padding: 16px; background: var(--color-primary); color: #fff; }
 .chat__log { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; background: var(--color-surface); }
 .bubble { max-width: 80%; padding: 10px 14px; border-radius: var(--bubble-radius); line-height: 1.5; }
@@ -1133,15 +1175,23 @@ body { margin: 0; font-family: var(--font-body); color: var(--color-text); backg
 import { search } from "./rag/pipeline.js";
 import { complete } from "./llm/client.js";
 
-const PERSONA_TONE = "formal"; // 답변 톤
 const GROUNDED_ONLY = true; // 근거 기반 답변 강제
+// 테스트/오프라인 환경: LLM_STUB=true 면 실제 LLM 호출 없이 결정적 스텁 응답을 쓴다.
+const STUB = process.env.LLM_STUB === "true";
 
 export async function answer(message: string): Promise<{ answer: string; sources: string[] }> {
   const contexts = await search(message); // TODO: 검색 결과로 컨텍스트 구성
-  // TODO: 답변에 출처/페이지를 표기한다 (citations=true).
+  // 출처 표기(citations=true): sources 를 답변과 함께 노출한다.
   const system = buildSystemPrompt(contexts);
-  const text = await complete(system, message);
-  return { answer: text, sources: contexts };
+  const text = STUB ? stubAnswer(message, contexts) : await complete(system, message);
+  const safe = text;
+  return { answer: safe, sources: contexts };
+}
+
+function stubAnswer(message: string, contexts: string[]): string {
+  // 결정적 스텁 — 골든셋 플러밍 테스트용. 실제 동작은 complete() 가 담당한다.
+  const cite = contexts.length ? " (참고: " + contexts.join(", ") + ")" : "";
+  return '[STUB] "' + message + '" 문의에 대한 안내입니다.' + cite;
 }
 
 function buildSystemPrompt(contexts: string[]): string {
@@ -1203,6 +1253,7 @@ export async function index(_chunks: Chunk[]): Promise<void> {
 /** 4) 검색 (hybrid) — 질문과 관련된 컨텍스트 텍스트 반환 */
 export async function search(_query: string): Promise<string[]> {
   // TODO: pgvector 에서 top-k 검색
+  console.warn("[rag] search() 미구현 — 빈 컨텍스트 반환. pgvector 연결을 구현하세요.");
   return [];
 }
 ",
@@ -1214,6 +1265,12 @@ const app = express();
 app.use(express.json());
 app.use(express.static("public"));
 
+// 감사 로그 미들웨어 (audit=true) — TODO: 보관소/포맷을 기관 정책에 맞게 (개인정보 주의)
+app.use((req, _res, next) => {
+  console.log(JSON.stringify({ ts: new Date().toISOString(), method: req.method, path: req.path }));
+  next();
+});
+
 // 헬스체크 (acceptance: 200 반환)
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
@@ -1221,12 +1278,13 @@ app.get("/health", (_req, res) => res.json({ status: "ok" }));
 app.post("/api/chat", async (req, res) => {
   const { message } = req.body ?? {};
   if (typeof message !== "string" || !message.trim()) {
-    return res.status(400).json({ error: "message 가 필요합니다." });
+    res.status(400).json({ error: "message 가 필요합니다." });
+    return;
   }
   try {
     const result = await answer(message);
     res.json(result);
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: "처리 중 오류가 발생했습니다." });
   }
 });
@@ -1236,21 +1294,29 @@ app.listen(port, () => console.log(\`server on :\${port}\`));
 ",
   "tests/golden.test.ts": "// 평가 골든셋 테스트 골격. (acceptance: 통과해야 납품 가능)
 // 지표: retrieval-hit, citation-accuracy
+// 실행: LLM_STUB=true 로 플러밍을 먼저 검증하고, 구현 완료 후 실제 LLM 으로 재검증한다.
 import { describe, it, expect } from "vitest";
 import { answer } from "../src/chat.js";
 
-const GOLDEN = [
-  { question: "주민등록등본 발급 방법은?" },
-  { question: "운영 시간은 어떻게 되나요?" },
+const GOLDEN: Array<{ question: string; expectedSource: string | null }> = [
+  { question: "주민등록등본 발급 방법은?", expectedSource: "민원편람.pdf" },
+  { question: "운영 시간은 어떻게 되나요?", expectedSource: null },
 ];
 
-describe("골든셋", () => {
+describe("골든셋 — 플러밍(LLM_STUB=true)", () => {
   for (const tc of GOLDEN) {
-    it("질문: " + tc.question, async () => {
+    it(tc.question, async () => {
       const res = await answer(tc.question);
-      // TODO: 기대 답변/근거(expectedAnswer/expectedSource)와 비교하도록 채운다.
       expect(typeof res.answer).toBe("string");
+      expect(res.answer.length).toBeGreaterThan(0);
     });
+  }
+});
+
+// 구현 완료 후 활성화할 실제 합격 기준(인용/근거 정확도).
+describe("골든셋 — 근거 정확도(구현 후)", () => {
+  for (const tc of GOLDEN.filter((t) => t.expectedSource)) {
+    it.todo(\`출처 포함: \${tc.question} → \${tc.expectedSource}\`);
   }
 });
 ",
