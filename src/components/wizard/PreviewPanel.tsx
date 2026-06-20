@@ -10,6 +10,7 @@ import { detectConflicts } from "@/lib/conflicts";
 import { getMissingRequired } from "@/lib/readiness";
 import { LLM_MODEL_CATALOG } from "@/catalog";
 import { label } from "@/generators/format";
+import { ChatPreview } from "./ChatPreview";
 
 export function PreviewPanel() {
   const spec = useWizardStore((s) => s.spec);
@@ -20,6 +21,8 @@ export function PreviewPanel() {
   return (
     <div className="space-y-5 text-sm">
       <h2 className="text-xs font-semibold uppercase tracking-wider text-muted">미리보기 / 요약</h2>
+
+      <ChatPreview />
 
       <dl className="space-y-2">
         <Row k="기관/챗봇" v={`${spec.project.org || "—"} / ${spec.project.name || "—"}`} />
