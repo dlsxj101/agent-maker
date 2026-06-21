@@ -1,5 +1,9 @@
 # agent-maker
 
+[![Deploy to GitHub Pages](https://github.com/dlsxj101/agent-maker/actions/workflows/deploy.yml/badge.svg)](https://github.com/dlsxj101/agent-maker/actions/workflows/deploy.yml)
+
+> **🔗 라이브 데모: https://dlsxj101.github.io/agent-maker/**
+
 > 공공기관 납품용 **챗봇 에이전트 구성 마법사**.
 > 테마·스택·RAG·LLM·API·컴플라이언스 등 챗봇에 필요한 모든 결정을 **보면서 선택**하고,
 > **Claude Code가 한 번에 챗봇을 구현할 수 있는 산출물 묶음(ZIP)** 을 내보냅니다.
@@ -110,6 +114,10 @@ npm run build        # 폐쇄망 배포: out/ 의 정적 파일만으로 어떤 
 
 > **폐쇄망 배포**: `output: "export"` 로 빌드하면 서버 없이 `out/` 의 정적 파일만으로 동작합니다.
 > 산출물 생성·ZIP 묶음이 모두 브라우저에서 처리되어 외부 호출이 없습니다.
+
+> **공개 데모 배포(GitHub Pages)**: `main` 에 푸시하면 [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)
+> 이 정적 `out/` 을 빌드해 **https://dlsxj101.github.io/agent-maker/** 로 자동 배포합니다.
+> 프로젝트 페이지 하위경로(`/agent-maker`)는 `PAGES_BASE_PATH` 환경변수로 CI 빌드에서만 적용되어 로컬 개발에는 영향이 없습니다.
 
 ---
 

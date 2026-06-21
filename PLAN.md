@@ -363,6 +363,7 @@ AgentSpec {
   - ✅ `npm audit` 재확인: moderate 2건(postcss transitive, Next 9.x 다운그레이드 유발)으로 **보류 유지**(변동 없음).
   - ✅ i18n(산출물 다국어) → **백로그**로 확정(§9). 현재는 한국어 기준 산출물.
   - ✅ README 갱신(동작 상태·검증·정적 export 배포).
+  - ✅ **GitHub Pages 자동 배포(2026-06-21)**: `.github/workflows/deploy.yml` — main 푸시 시 정적 export(`out/`)를 빌드해 Pages로 배포(`upload-pages-artifact`+`deploy-pages`). 프로젝트 페이지 하위경로 대응을 위해 `PAGES_BASE_PATH=/<repo>` 환경변수로 `next.config`의 `basePath`/`assetPrefix`를 CI 빌드에서만 분기(로컬 개발은 루트 유지). 라이브: https://dlsxj101.github.io/agent-maker/ (public 레포 → Pages·Actions 무료). 폐쇄망 배포(정적 `out/`)와 병행하는 **공개 데모/검토용 채널**.
 
 > **검증 루프 요약** (제품의 본질이므로 로드맵에 명시):
 > - 자동: 골든 산출물 스냅샷 테스트 · `AgentSpec` round-trip · 충돌 규칙 단위 테스트
@@ -409,7 +410,7 @@ AgentSpec {
   - 재검증: 재생성 → tsc 클린 + 골든 + 런타임(/api/chat/confirm 200·400) 통과.
 
 **여전히 열려 있는 항목:**
-- ✅ 마법사 배포 타깃 = **정적 export 확정**(M6, `output: "export"`). 폐쇄망 배포 시 `out/` 정적 파일 서빙.
+- ✅ 마법사 배포 타깃 = **정적 export 확정**(M6, `output: "export"`). 폐쇄망 배포 시 `out/` 정적 파일 서빙. **공개 데모는 GitHub Pages 자동 배포**(M6, 위 §8 참조) — 두 배포는 동일 `out/` 산출물 공유.
 - 📌 **백로그**: 산출물 다국어(한/영) — 현재는 한국어 기준. 수요 발생 시 PROMPT/DESIGN 템플릿·UI 라벨 다국어화.
 - ✅ **상호작용/에이전트 능력 옵션(2~3패스 구현 완료)**: §9 interaction(동작방식·도구정책/루프·스트리밍·렌더링·출력형식·컨텍스트미터·웰컴·컨트롤[초기화/내보내기]·피드백·멀티모달) + §10 agent(서브에이전트·AskUser·내장도구·장기기억·컨텍스트 자동압축·안전[거절/rate limit/남용]). guardrails(groundedOnly·piiFilter·bannedTopics)는 §7 llm.
 - ✅ **(구현 완료)** 서브에이전트 역할 명세, 도구결과 캐싱(ops.caching tool-result), 핸드오프 SLA, A/B 응답 비교, 음성 STT/TTS 엔진, 이용 고지/동의·상태 메시지·접근성 사용자 컨트롤.
