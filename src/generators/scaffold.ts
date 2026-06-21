@@ -226,6 +226,7 @@ function chatTs(spec: AgentSpec): string {
       `    const result = await TOOLS[name]({ query: message });\n` +
       `    contexts.push("[tool:" + name + "] " + JSON.stringify(result));\n` +
       `    sources.push("tool:" + name);\n` +
+      `    traces.push({ tool: name, result });\n` +
       `  }\n`
     : "";
 
@@ -237,14 +238,24 @@ function chatTs(spec: AgentSpec): string {
     ? `\n// 개인정보 마스킹 (piiFilter/masking) — TODO: 기관 정책에 맞게 패턴을 보강한다.\nfunction maskPii(text: string): string {\n  return text\n    .replace(/\\d{6}-\\d{7}/g, "******-*******") // 주민등록번호\n    .replace(/01[016789]-?\\d{3,4}-?\\d{4}/g, "***-****-****") // 휴대전화\n    .replace(/[\\w.+-]+@[\\w-]+\\.[\\w.-]+/g, "***@***"); // 이메일\n}\n`
     : "";
 
+  const wantTrace = toolAgent && it.rendering.toolCallDisplay !== "hidden";
+  const streamDestructure = wantTrace
+    ? "const { contexts, sources, traces } = await gather(message);"
+    : "const { contexts, sources } = await gather(message);";
+  const traceEmit = wantTrace
+    ? "  // 도구 호출 trace 를 먼저 전송 (toolCallDisplay 표시용)\n  for (const t of traces) yield { trace: t };\n"
+    : "";
+  const streamEventType = `{ delta?: string; sources?: string[]${
+    wantTrace ? "; trace?: { tool: string; result: unknown }" : ""
+  } }`;
   const streamFn = streaming
     ? `
-// 스트리밍 응답 — 토큰 델타를 순차 yield, 마지막에 sources. (/api/chat/stream 에서 SSE 로 전송)
-export async function* answerStream(message: string, sessionId?: string): AsyncGenerator<{ delta?: string; sources?: string[] }> {
-  const { contexts, sources } = await gather(message);
+// 스트리밍 응답 — (도구 trace) → 토큰 델타 → sources. (/api/chat/stream 에서 SSE 로 전송)
+export async function* answerStream(message: string, sessionId?: string): AsyncGenerator<${streamEventType}> {
+  ${streamDestructure}
   const system = buildSystemPrompt(contexts);
   const messages: Msg[] = [...loadHistory(sessionId), { role: "user", content: message }];
-  let full = "";
+${traceEmit}  let full = "";
   if (STUB) {
     for (const tok of stubAnswer(message, contexts).split(/(\\s+)/)) { full += tok; yield { delta: tok }; }
   } else {
@@ -266,9 +277,10 @@ const STUB = process.env.LLM_STUB === "true"; // 테스트/오프라인: 실제 
 ${sessionDecl}
 export interface ChatResult { answer: string; sources: string[]; }
 
-// 컨텍스트 구성: RAG 검색${toolAgent ? " + 도구 호출" : ""}
-async function gather(message: string): Promise<{ contexts: string[]; sources: string[] }> {
-${ragSearch}${ragLines}${toolLines}  return { contexts, sources };
+// 컨텍스트 구성: RAG 검색${toolAgent ? " + 도구 호출(trace 수집)" : ""}
+async function gather(message: string): Promise<{ contexts: string[]; sources: string[]; traces: { tool: string; result: unknown }[] }> {
+${ragSearch}${ragLines}  const traces: { tool: string; result: unknown }[] = [];
+${toolLines}  return { contexts, sources, traces };
 }
 
 export async function answer(message: string, sessionId?: string): Promise<ChatResult> {
@@ -554,6 +566,7 @@ function chatUiJs(spec: AgentSpec): string {
         if (!line) continue;
         try {
           const ev = JSON.parse(line.slice(5).trim());
+          if (ev.trace) add("trace", "🔧 도구 호출: " + ev.trace.tool);
           if (ev.delta) bot.textContent += ev.delta;
         } catch (_) { /* skip */ }
       }
@@ -621,6 +634,7 @@ ${layoutCss}
 .bubble { max-width: 80%; padding: 10px 14px; border-radius: var(--bubble-radius); line-height: 1.5; }
 .bubble--user { align-self: flex-end; background: var(--color-primary); color: #fff; }
 .bubble--bot { align-self: flex-start; background: #fff; border: 1px solid var(--color-border); }
+.bubble--trace { align-self: flex-start; background: transparent; border: 1px dashed var(--color-border); color: var(--color-muted); font-size: 12px; font-family: var(--font-mono, monospace); }
 .chat__form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--color-border); }
 .chat__input { flex: 1; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 8px; font: inherit; }
 .chat__send { padding: 10px 16px; border: none; border-radius: 8px; background: var(--color-accent); color: #fff; cursor: pointer; }

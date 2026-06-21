@@ -63,6 +63,7 @@ describe("generateArtifacts — 파일 구성", () => {
     expect(m["src/chat.ts"]).toContain("Object.keys(TOOLS)");
     expect(m["src/server.ts"]).toContain("/api/chat/confirm"); // toolPolicy=confirm
     expect(m["PROMPT.md"]).toContain("search_minwon"); // PROMPT 가 도구를 이름으로 명시
+    expect(m["src/chat.ts"]).toContain("yield { trace: t }"); // 도구 trace SSE 이벤트(expanded)
   });
 
   it("안전 설정(rate limit/남용/입력길이)이 server 가드 미들웨어로 생성된다", () => {
