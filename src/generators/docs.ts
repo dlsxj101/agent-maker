@@ -82,9 +82,12 @@ export function renderPromptMd(spec: AgentSpec): string {
     const ragExtra: string[] = [];
     if (spec.rag.sources.includes("upload-hwp")) {
       ragExtra.push(
-        "HWP(한글)는 표준 Node 파서가 없으므로 변환 전략(libreoffice 변환 또는 hwp.js 등)을 먼저 정해 적재 단계에 반영한다.",
+        "HWP(한글)는 표준 Node 파서가 없다 — **권장: `libreoffice --headless --convert-to txt`로 변환 후 텍스트 추출**(폐쇄망은 libreoffice를 오프라인 설치 패키지에 포함). 변환 실패 파일은 적재 로그에 남긴다.",
       );
     }
+    ragExtra.push(
+      "개발/CI(`EMBEDDING_API_URL`·`DATABASE_URL` 미설정)에서는 `src/rag/pipeline.ts`의 샘플 코퍼스 키워드 폴백으로 동작한다(골든셋 통과용). **실제 문서 적재 + 벡터 검색 구현으로 반드시 이를 대체**한다.",
+    );
     if (["bge-m3", "kure", "ko-sroberta", "multilingual-e5"].includes(spec.rag.embedding)) {
       ragExtra.push(
         `임베딩 \`${spec.rag.embedding}\`은 API가 아니라 별도 추론 서버가 필요하다 — \`EMBEDDING_API_URL\` 엔드포인트로 연결한다(ARCHITECTURE 참조).`,
@@ -114,7 +117,11 @@ export function renderPromptMd(spec: AgentSpec): string {
       spec.llm.serving,
     )}. 시스템 프롬프트는 ${label("tone", spec.conversation.persona.tone)} 톤. 가드레일: 근거기반 ${yesno(
       spec.llm.guardrails.groundedOnly,
-    )}, 민감정보 필터 ${yesno(spec.llm.guardrails.piiFilter)}.`,
+    )}, 민감정보 필터 ${yesno(spec.llm.guardrails.piiFilter)}.${
+      spec.llm.session.multiTurn
+        ? ` 멀티턴: \`/api/chat\`에 \`sessionId\`를 받아 세션별 대화 이력(messages 배열)을 유지해 \`complete()\`에 함께 전달한다${spec.llm.session.historyTurns ? `(최근 ${spec.llm.session.historyTurns}턴)` : ""}.`
+        : ""
+    }${spec.interaction.streaming.enabled ? ` 스트리밍: \`/api/chat\`을 \`text/event-stream\`(SSE, \`res.write()\`)으로 토큰 전송하거나 프론트 레이어에서 처리한다.` : ""}`,
   );
   steps.push(
     `${n++}. **대화 설계 반영**: 페르소나/인텐트/빠른응답/폴백(${label(
@@ -403,7 +410,7 @@ export function renderArchitectureMd(spec: AgentSpec): string {
 ${ragFlow}
 ${
     ragOn && ["bge-m3", "kure", "ko-sroberta", "multilingual-e5"].includes(spec.rag.embedding)
-      ? `\n> 임베딩 \`${spec.rag.embedding}\`은 클라우드 API가 아니라 **추론 서버**가 필요하다. 별도 컨테이너/서버로 띄우고 \`EMBEDDING_API_URL\`로 연결한다. 폐쇄망에서는 오프라인 설치 패키지에 모델 가중치를 포함한다.\n`
+      ? `\n> 임베딩 \`${spec.rag.embedding}\`은 클라우드 API가 아니라 **추론 서버**가 필요하다. 별도 컨테이너/서버로 띄우고 \`EMBEDDING_API_URL\`로 연결한다. 폐쇄망에서는 오프라인 설치 패키지에 모델 가중치를 포함한다.\n>\n> **API 계약(예시)**: \`POST {EMBEDDING_API_URL}/embed\` 요청 \`{ "text": "..." }\` → 응답 \`{ "embedding": number[] }\`. 예: \`text-embeddings-inference\`(HuggingFace) 또는 자체 FastAPI 래퍼. 미설정 시 \`src/rag/pipeline.ts\`는 샘플 코퍼스 폴백으로 동작한다.\n`
       : ""
 }
 

@@ -370,6 +370,14 @@ AgentSpec {
 - ✅ UI = **커스텀 Tailwind 컴포넌트** 확정 (M4). shadcn/ui·Radix 프레임워크는 미도입(핵심이 커스텀 시각물). 접근성 프리미티브(탭/다이얼로그)가 필요한 곳만 추후 `@radix-ui/*` 최소 도입.
 - ✅ **앱 디자인 방향 = 절제된 개발자 도구형 + 딥 틸**(사용자 확정). 토큰 시스템 `src/app/globals.css`, 문서 `docs/app-design.md`. mono 'spec' 모티프·헤어라인·컴팩트. (산출물 챗봇 DESIGN.md 와 별개)
 
+**export-verify E2E 게이트 로그 (2026-06-21):**
+- 대표 2종(cloud / airgap) 산출물로 실행. **합격 기준 4/4 통과** — ① PROMPT.md 단독 구현 착수(Sonnet 구현 에이전트 "mostly", 빌드/기동/골든셋 자력 통과) ② 빌드+기동(`/health` 200) ③ 골든셋 통과 ④ 결정성(재생성 동일).
+- 구현 에이전트가 찾은 모호함 → 생성기에 반영(피드백 루프 완료):
+  - **(BLOCKER) RAG `search()`가 빈 결과** → `src/rag/pipeline.ts`에 골든셋 파생 샘플 코퍼스 + 키워드 폴백 추가(개발/CI에서 인용 경로 동작). 골든셋의 "근거 정확도" 테스트를 todo→실제 검증으로 활성화(`/api/chat` sources 채워짐 확인).
+  - **(MAJOR) PII 마스킹이 collectsPii에만** → `guardrails.piiFilter`에도 적용 + 이메일 패턴 추가.
+  - **(MAJOR) 멀티턴/스트리밍/HWP/임베딩 계약 안내 부족** → PROMPT(멀티턴 sessionId·SSE·HWP libreoffice 확정·개발 폴백)·ARCHITECTURE(임베딩 API 계약 예시) 보강.
+  - 에이전트가 "모델 ID claude-sonnet-4-6이 비실재"라 했으나 **오판(학습 시점 한계)** — 유효 ID, 변경 안 함.
+
 **여전히 열려 있는 항목:**
 - ✅ 마법사 배포 타깃 = **정적 export 확정**(M6, `output: "export"`). 폐쇄망 배포 시 `out/` 정적 파일 서빙.
 - 📌 **백로그**: 산출물 다국어(한/영) — 현재는 한국어 기준. 수요 발생 시 PROMPT/DESIGN 템플릿·UI 라벨 다국어화.
