@@ -8,7 +8,7 @@
  */
 
 import type { AgentSpec } from "@/lib/agent-spec";
-import { CLOUD_EMBEDDING_IDS } from "@/catalog";
+import { CLOUD_EMBEDDING_IDS, CLOUD_VOICE_ENGINES } from "@/catalog";
 import { LLM_MODEL_CATALOG } from "@/catalog";
 
 export interface Conflict {
@@ -179,9 +179,11 @@ export function detectConflicts(spec: AgentSpec): Conflict[] {
     });
   }
 
-  // C16: 폐쇄망인데 클라우드 음성 엔진
-  const cloudVoice = ["clova", "google"];
-  if (spec.backend.network === "offline" && (cloudVoice.includes(it.voice.stt) || cloudVoice.includes(it.voice.tts))) {
+  // C16: 폐쇄망인데 클라우드 음성 엔진 (카탈로그에서 cloud 배포 엔진을 파생)
+  if (
+    spec.backend.network === "offline" &&
+    (CLOUD_VOICE_ENGINES.includes(it.voice.stt) || CLOUD_VOICE_ENGINES.includes(it.voice.tts))
+  ) {
     out.push({
       id: "C16",
       section: "interaction",

@@ -365,6 +365,32 @@ AgentSpec {
   - ✅ README 갱신(동작 상태·검증·정적 export 배포).
   - ✅ **GitHub Pages 자동 배포(2026-06-21)**: `.github/workflows/deploy.yml` — main 푸시 시 정적 export(`out/`)를 빌드해 Pages로 배포(`upload-pages-artifact`+`deploy-pages`). 프로젝트 페이지 하위경로 대응을 위해 `PAGES_BASE_PATH=/<repo>` 환경변수로 `next.config`의 `basePath`/`assetPrefix`를 CI 빌드에서만 분기(로컬 개발은 루트 유지). 라이브: https://dlsxj101.github.io/agent-maker/ (public 레포 → Pages·Actions 무료). 폐쇄망 배포(정적 `out/`)와 병행하는 **공개 데모/검토용 채널**.
 
+- **M7 — 고도화 (Enhancement)** 🚧 *(진행 중 — 2026-06-21 착수)*
+
+  > **배경**: M0~M6으로 마법사·생성기·검증·배포가 완성되고 선택지가 포화(§9)된 뒤, 다음 작업 축은
+  > **산출물 품질·스캐폴드 폭**이다(§8 스냅샷 결론). 사용자 지시(2026-06-21)로 아래 4개 고도화를 일괄 착수한다.
+  > **실 E2E(키·실문서·벡터DB로 실 LLM/임베딩/tool-use 런타임 검증)는 현 환경에서 불가·불필요로 판단해 제외**한다(§8 검증 경계 유지).
+
+  > **M7 결정 (사용자 확정, 2026-06-21):**
+  > 1. **산출물 문서 언어 = 명시적 토글(`docLang`)**, 기본값 **`ko`**. 근거: 현 프런티어 Claude는
+  >    한/영 지시 수행 성능차가 사실상 없음 → "어느 쪽이 낫냐"를 고정하지 않고 export마다 선택. 기본 한국어는
+  >    프로젝트 공용어 + 공공기관 사람 검토 친화. `project.languages`(챗봇 동작 언어)와는 **분리된 개념**이다.
+  > 2. **스택별 템플릿 = Node/TS 수준 풀 패리티.** Python/Java/Go도 server+chat+llm client(스트리밍·tool-use)+
+  >    rag+tools+골든 테스트+매니페스트까지 동등 깊이로 생성한다(기존 "진입점+매니페스트" 백로그를 상향).
+
+  - **M7-0 — 세팅/리팩터(0번 작업)**: 스캐폴드 생성기를 `backend.runtime` 기준 **디스패처**로 리팩터
+    (`src/generators/scaffold/index.ts` + `node.ts`/`python.ts`/`java.ts`/`go.ts`). 기존 Node 구현을 `node.ts`로 추출(참조 구현).
+  - **M7-A — OpenAI 호환 function-calling 루프**: `llm/client.ts`의 OpenAI 호환 `completeWithTools` TODO 스텁을
+    실제 `tools`(function calling) 왕복 루프로 구현(프록시·사내추론·오픈소스 OpenAI 호환 엔드포인트). Claude 경로와 동등.
+  - **M7-B — 음성 엔진 카탈로그화**: `VOICE_STT/TTS_ENGINES`(현재 enum)를 메타데이터(라벨·설명·온프레미스 적합성·
+    정합 경고)를 가진 **카탈로그 데이터**(`src/catalog/voice.ts`)로 분리. InteractionStep UI·충돌(C15/C16)·산출물이 데이터를 참조.
+  - **M7-C — 산출물 다국어(한/영)**: `docLang` 필드 신설 → 생성 문서(PROMPT/DESIGN/CLAUDE/ARCHITECTURE/README)와
+    문서 라벨을 ko/en으로 렌더. `format.ts` 라벨 사전·`docs.ts` 템플릿을 언어별로 분기. 마법사 UI 라벨 다국어화는 후속.
+  - **M7-D — 스택별 풀 패리티 스캐폴드**: Python(FastAPI/Django/Flask)·Java(Spring Boot)·Go(Gin/Echo) 각각
+    Node와 동등한 깊이의 골격 생성. export-verify를 스택별로 확장(최소 tsc/컴파일·기동·골든셋 스모크).
+  - **검증**: 각 스택 산출물의 정적 검증(컴파일/타입체크)·`/health`·골든셋 스모크. 골든 스냅샷 갱신. 단위 테스트 확장.
+  - ⏭️ **마법사 UI 라벨 다국어화**(산출물이 아닌 마법사 자체)는 수요 기반 후속.
+
 > **검증 루프 요약** (제품의 본질이므로 로드맵에 명시):
 > - 자동: 골든 산출물 스냅샷 테스트 · `AgentSpec` round-trip · 충돌 규칙 단위 테스트
 > - 반자동(게이트): 생성된 ZIP → 실제 Claude Code 실행 → 빌드/기동 + 골든셋 통과. **M2에서 1회, M6에서 전 범위 재검증.**

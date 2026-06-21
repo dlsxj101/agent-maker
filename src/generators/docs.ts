@@ -174,7 +174,9 @@ export function renderPromptMd(spec: AgentSpec): string {
     interactionExtra.push(`멀티모달: ${it.multimodal.join(", ")} (접근성 연계).`);
   }
   if (it.voice.stt !== "none" || it.voice.tts !== "none") {
-    interactionExtra.push(`음성 엔진: STT "${it.voice.stt}"·TTS "${it.voice.tts}".`);
+    interactionExtra.push(
+      `음성 엔진: STT ${label("voice", it.voice.stt)}·TTS ${label("voice", it.voice.tts)}.`,
+    );
   }
   if (it.disclaimer.aiNotice || it.disclaimer.consent) {
     interactionExtra.push(

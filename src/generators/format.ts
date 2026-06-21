@@ -124,6 +124,14 @@ const LABELS: Record<string, Record<string, string>> = {
   tone: { formal: "공손/격식", concise: "간결", friendly: "친근" },
   onUnknown: { apologize: "정중히 한계 안내", rephrase: "재질문 유도", handoff: "상담사 연결" },
   handoff: { none: "없음", "human-agent": "상담원", phone: "전화", email: "이메일" },
+  voice: {
+    none: "사용 안 함",
+    browser: "브라우저 내장",
+    "whisper-local": "Whisper(온프레미스)",
+    "coqui-local": "Coqui TTS(온프레미스)",
+    clova: "네이버 클로바(클라우드)",
+    google: "Google(클라우드)",
+  },
 };
 
 /** 단일 enum 값을 한글 라벨로. 사전에 없으면 원문 반환. */

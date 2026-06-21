@@ -6,7 +6,14 @@
  */
 
 import { useWizardStore } from "@/lib/store";
-import { AGENT_MODE_CATALOG, INTERACTION_LABELS } from "@/catalog";
+import {
+  AGENT_MODE_CATALOG,
+  INTERACTION_LABELS,
+  VOICE_STT_CATALOG,
+  VOICE_TTS_CATALOG,
+  isAirgapSuitable,
+  type VoiceEngineOption,
+} from "@/catalog";
 import {
   TOOL_POLICIES,
   STREAM_SPEEDS,
@@ -30,14 +37,6 @@ const L = INTERACTION_LABELS;
 const opts = <T extends string>(arr: readonly T[], map: Record<string, string>) =>
   arr.map((v) => [v, map[v] ?? v] as const);
 
-const VOICE_LABELS: Record<string, string> = {
-  none: "사용 안 함",
-  browser: "브라우저 내장",
-  "whisper-local": "Whisper (온프레미스)",
-  "coqui-local": "Coqui TTS (온프레미스)",
-  clova: "네이버 클로바 (클라우드)",
-  google: "Google (클라우드)",
-};
 const A11Y_LABELS: Record<string, string> = {
   "font-size": "글자 크기 조절",
   "high-contrast": "고대비 모드",
@@ -47,15 +46,16 @@ const TOOLPOLICY_DESC: Record<string, string> = { none: "도구 미사용", auto
 const SPEED_DESC: Record<string, string> = { slow: "또박또박", normal: "표준 속도", fast: "빠르게", instant: "즉시(스트리밍 없음)" };
 const TOOLCALL_DESC: Record<string, string> = { hidden: "사용자에게 숨김", collapsed: "접어서 표시(펼치기 가능)", expanded: "항상 펼쳐 표시" };
 const LENGTH_DESC: Record<string, string> = { brief: "핵심만 짧게", balanced: "적정 분량", detailed: "근거까지 상세히" };
-const VOICE_LOCAL: string[] = ["browser", "whisper-local", "coqui-local"];
-const voiceOpts = <T extends string>(arr: readonly T[]) =>
-  arr.map((id) => ({
-    id,
-    label: VOICE_LABELS[id] ?? id,
+// 카탈로그(src/catalog/voice.ts) → OptionCards 옵션. 폐쇄망 적합성을 배지로 표시.
+const voiceOpts = <T extends string>(catalog: VoiceEngineOption<T>[]) =>
+  catalog.map((e) => ({
+    id: e.id,
+    label: e.label,
+    description: e.description,
     preview:
-      id === "none" ? undefined : (
-        <span className={`text-[10px] ${VOICE_LOCAL.includes(id) ? "text-primary" : "text-muted"}`}>
-          {VOICE_LOCAL.includes(id) ? "온프레미스" : "클라우드"}
+      e.deployment === "none" ? undefined : (
+        <span className={`text-[10px] ${isAirgapSuitable(e.deployment) ? "text-primary" : "text-muted"}`}>
+          {isAirgapSuitable(e.deployment) ? "온프레미스 가능" : "클라우드"}
         </span>
       ),
   }));
@@ -218,14 +218,14 @@ export function InteractionStep() {
             columns={3}
             value={it.voice.stt}
             onChange={(v) => update("interaction", { voice: { ...it.voice, stt: v as (typeof VOICE_STT_ENGINES)[number] } })}
-            options={voiceOpts(VOICE_STT_ENGINES)}
+            options={voiceOpts(VOICE_STT_CATALOG)}
           />
           <OptionCards
             label="TTS (음성 합성)"
             columns={3}
             value={it.voice.tts}
             onChange={(v) => update("interaction", { voice: { ...it.voice, tts: v as (typeof VOICE_TTS_ENGINES)[number] } })}
-            options={voiceOpts(VOICE_TTS_ENGINES)}
+            options={voiceOpts(VOICE_TTS_CATALOG)}
           />
         </div>
       )}
