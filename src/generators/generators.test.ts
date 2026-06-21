@@ -53,11 +53,15 @@ describe("generateArtifacts — 파일 구성", () => {
     expect(paths).not.toContain("src/rag/pipeline.ts");
   });
 
-  it("tool-agent 는 tools.ts + 도구 루프를 생성한다", () => {
+  it("tool-agent 는 tools.ts(TOOLS+TOOL_DEFS) + 도구 루프 + confirm 라우트를 생성한다", () => {
     const m = fileMap(generateArtifacts(toolAgentSpec, { now: FIXED_NOW }));
     expect(m["src/tools.ts"]).toContain("search_minwon");
-    expect(m["src/chat.ts"]).toContain("Object.keys(TOOLS)");
     expect(m["src/tools.ts"]).toContain("export const TOOLS");
+    expect(m["src/tools.ts"]).toContain("TOOL_DEFS"); // Anthropic tool-use 정의
+    expect(m["src/tools.ts"]).toContain("input_schema");
+    expect(m["src/chat.ts"]).toContain("Object.keys(TOOLS)");
+    expect(m["src/server.ts"]).toContain("/api/chat/confirm"); // toolPolicy=confirm
+    expect(m["PROMPT.md"]).toContain("search_minwon"); // PROMPT 가 도구를 이름으로 명시
   });
 
   it("안전 설정(rate limit/남용/입력길이)이 server 가드 미들웨어로 생성된다", () => {

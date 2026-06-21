@@ -386,6 +386,12 @@ AgentSpec {
 
 **export-verify 2차 (2026-06-21, 스캐폴드 깊이 후):** cloud/airgap/**toolagent** 3종 — tsc 클린 + 골든셋 통과. 런타임 스모크로 **SSE 스트리밍·tool-agent 도구호출·세션ID** 동작 확인. 게이트가 생성 코드의 실제 타입버그(세션 리터럴 `Msg` 미좁힘)를 잡아 수정 → `export-verify` 스킬에 "tsc 별도 실행/골든셋≠동작/에이전트 보고 비판검증" 교훈 반영.
 
+**export-verify 3차 (2026-06-21, tool-agent 구현 에이전트 1-shot):** toolagent 프로필에 Sonnet 구현 에이전트 투입 → **합격 6/6**(install·tsc·test·/api/chat 도구출처·SSE·가드400). criterion 1 "mostly". 지적된 tool-agent 과소명세를 생성기에 반영:
+  - 스키마: `integrations.tools[].parameters`(JSON Schema) 추가.
+  - 스캐폴드: `tools.ts`에 `TOOL_DEFS`(Anthropic `tools` 형식, input_schema) + 실제 tool-use 루프 안내, `toolPolicy=confirm` 시 `/api/chat/confirm` 스텁 라우트.
+  - PROMPT: 도구를 이름으로 명시, 실제 LLM tool-use 루프(stop_reason→tool_result) 설명, confirm HITL 계약, trace 이벤트, 스트리밍 엔드포인트 `/api/chat/stream` 정정.
+  - 재검증: 재생성 → tsc 클린 + 골든 + 런타임(/api/chat/confirm 200·400) 통과.
+
 **여전히 열려 있는 항목:**
 - ✅ 마법사 배포 타깃 = **정적 export 확정**(M6, `output: "export"`). 폐쇄망 배포 시 `out/` 정적 파일 서빙.
 - 📌 **백로그**: 산출물 다국어(한/영) — 현재는 한국어 기준. 수요 발생 시 PROMPT/DESIGN 템플릿·UI 라벨 다국어화.

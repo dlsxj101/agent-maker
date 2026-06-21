@@ -71,6 +71,7 @@ metadata:
 - **`tsc`를 골든셋과 별도로 돌려라.** vitest/esbuild 는 타입을 검사하지 않아 **타입 에러가 있어도 골든셋이 통과**한다. 생성 코드 타입 안전은 `npx tsc`로만 보장된다(예: 세션 스토어 객체 리터럴이 `Msg`로 안 좁혀지던 버그를 골든셋은 못 잡고 tsc가 잡음).
 - **골든셋 "통과" ≠ "동작".** `search()`가 빈 배열을 반환해도 답변 길이만 보는 테스트는 통과한다. → 인용 정확도 테스트로 **출처가 실제로 채워지는지** 검증하고, 새 엔드포인트(`/api/chat/stream` SSE, tool-agent 도구 호출)는 **런타임 curl 스모크**로 직접 확인한다.
 - **구현 에이전트 보고를 비판적으로 검증하라.** 서브에이전트 학습 시점이 낡아 **오판**할 수 있다(예: 유효 모델 ID `claude-sonnet-4-6`을 "비실재"라 보고 → 무시). 사실 확인 후에만 생성기에 반영한다.
+- **tool-agent 프로필은 메커닉을 PROMPT에 명시했는지 본다.** 도구 이름·input_schema, 실제 LLM tool-use 루프(stop_reason→tool_result), `toolPolicy=confirm`의 HITL 계약, trace 표시까지 PROMPT/스캐폴드에 있어야 한다. `agent-spec.json`에만 두고 PROMPT가 침묵하면 구현자가 막힌다(실측 BLOCKER).
 
 ## 주의
 - 검증은 **실제 실행**이 핵심이다. "될 것 같다"로 통과시키지 않는다.

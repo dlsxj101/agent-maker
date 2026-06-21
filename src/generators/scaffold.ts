@@ -122,6 +122,23 @@ ${guardChecks.join("\n")}
 });
 `
     : "";
+  const confirmRoute =
+    spec.interaction.agentMode === "tool-agent" && spec.interaction.toolPolicy === "confirm"
+      ? `
+// 도구 실행 승인 (toolPolicy=confirm) — 도구 실행 전 사용자 승인을 받는 HITL 핸드셰이크.
+// 흐름: /api/chat 가 { type: "awaiting_confirmation", toolName, toolArgs, confirmToken } 로 응답
+//       → 프론트가 사용자 승인 후 여기로 POST → 서버가 도구 실행 후 후속 답변 반환.
+app.post("/api/chat/confirm", async (req, res) => {
+  const { confirmToken, approved } = req.body ?? {};
+  if (typeof confirmToken !== "string") {
+    res.status(400).json({ error: "confirmToken 이 필요합니다." });
+    return;
+  }
+  // TODO: confirmToken 으로 보류된 도구 호출을 조회 → approved 면 TOOLS 로 실행 후 후속 답변 생성.
+  res.json({ status: approved ? "executed" : "rejected", note: "TODO: confirm 흐름 구현" });
+});
+`
+      : "";
   const streaming = spec.interaction.streaming.enabled;
   const streamRoute = streaming
     ? `
@@ -172,7 +189,7 @@ app.post("/api/chat", async (req, res) => {
     res.status(500).json({ error: "처리 중 오류가 발생했습니다." });
   }
 });
-${streamRoute}
+${streamRoute}${confirmRoute}
 const port = Number(process.env.PORT ?? 3000);
 app.listen(port, () => console.log(\`server on :\${port}\`));
 `;
@@ -284,7 +301,7 @@ function buildSystemPrompt(contexts: string[]): string {
 `;
 }
 
-// tool-agent 도구 레지스트리 (integrations.tools → 스텁 함수)
+// tool-agent 도구 레지스트리 (integrations.tools → 스텁 함수 + Anthropic-format 정의)
 function toolsTs(spec: AgentSpec): string {
   const tools = spec.integrations.tools.length
     ? spec.integrations.tools
@@ -297,12 +314,28 @@ function toolsTs(spec: AgentSpec): string {
         )}, args, result: "TODO: 실제 구현" }),`,
     )
     .join("\n");
+  const defs = tools
+    .map((t) => {
+      const schema =
+        t.parameters ?? { type: "object", properties: {}, required: [] };
+      return `  { name: ${JSON.stringify(t.name)}, description: ${JSON.stringify(
+        t.description,
+      )}, input_schema: ${JSON.stringify(schema)} },`;
+    })
+    .join("\n");
   return `// 도구 레지스트리 — agentMode=tool-agent. (각 도구의 실제 로직을 채운다)
 export type ToolFn = (args: Record<string, unknown>) => Promise<unknown>;
 
+// 실행기: 이름 → 함수. (실제 API 호출/DB 조회 등으로 채운다)
 export const TOOLS: Record<string, ToolFn> = {
 ${entries}
 };
+
+// LLM tool-use 정의 (Anthropic \`tools\` 파라미터 형식) — messages.create({ tools: TOOL_DEFS }) 로 전달.
+// 실제 루프: stop_reason==="tool_use" 면 해당 도구를 TOOLS 로 실행 → tool_result 로 회신 → 반복(최대 maxSteps).
+export const TOOL_DEFS = [
+${defs}
+] as const;
 `;
 }
 

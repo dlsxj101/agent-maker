@@ -121,7 +121,7 @@ export function renderPromptMd(spec: AgentSpec): string {
       spec.llm.session.multiTurn
         ? ` 멀티턴: \`/api/chat\`에 \`sessionId\`를 받아 세션별 대화 이력(messages 배열)을 유지해 \`complete()\`에 함께 전달한다${spec.llm.session.historyTurns ? `(최근 ${spec.llm.session.historyTurns}턴)` : ""}.`
         : ""
-    }${spec.interaction.streaming.enabled ? ` 스트리밍: \`/api/chat\`을 \`text/event-stream\`(SSE, \`res.write()\`)으로 토큰 전송하거나 프론트 레이어에서 처리한다.` : ""}`,
+    }${spec.interaction.streaming.enabled ? ` 스트리밍: \`/api/chat/stream\`(SSE, \`text/event-stream\`)이 토큰 \`{delta}\` 이벤트를 전송한다(\`answerStream\`). 비스트리밍은 \`/api/chat\`(JSON).` : ""}`,
   );
   steps.push(
     `${n++}. **대화 설계 반영**: 페르소나/인텐트/빠른응답/폴백(${label(
@@ -142,11 +142,27 @@ export function renderPromptMd(spec: AgentSpec): string {
   }[it.agentMode];
   const interactionExtra: string[] = [];
   if (it.agentMode === "tool-agent") {
+    const toolList = spec.integrations.tools.length
+      ? spec.integrations.tools.map((t) => `\`${t.name}\`(${t.description})`).join(", ")
+      : "(integrations.tools 미정의 — 먼저 도구를 정의하라)";
     interactionExtra.push(
-      `에이전트 루프: 도구 실행 정책 "${it.toolPolicy}"${
-        it.maxSteps ? `, 최대 ${it.maxSteps}회 반복` : ""
-      }${it.parallelTools ? ", 병렬 호출" : ""}. 도구호출 표시 "${it.rendering.toolCallDisplay}".`,
+      `에이전트 루프(최대 ${it.maxSteps ?? 5}회${it.parallelTools ? ", 병렬" : ""}): 도구 = ${toolList}.`,
     );
+    interactionExtra.push(
+      `실제 LLM tool-use 로 구현한다 — \`src/tools.ts\`의 \`TOOL_DEFS\`(Anthropic \`tools\` 형식, input_schema 포함)를 \`messages.create({ tools })\`에 전달하고, \`stop_reason==="tool_use"\`면 \`TOOLS\`로 실행→\`tool_result\` 회신→반복. (스캐폴드의 단순 루프를 이 방식으로 대체)`,
+    );
+    if (it.toolPolicy === "confirm") {
+      interactionExtra.push(
+        `도구 실행 정책 "confirm"(HITL): 도구 실행 전 사용자 승인을 받는다 — \`/api/chat\`가 \`{ type:"awaiting_confirmation", toolName, toolArgs, confirmToken }\`를 반환하고, 프론트 승인 후 \`/api/chat/confirm\`(스텁 동봉)으로 실행한다.`,
+      );
+    } else {
+      interactionExtra.push(`도구 실행 정책 "${it.toolPolicy}".`);
+    }
+    if (it.rendering.toolCallDisplay !== "hidden") {
+      interactionExtra.push(
+        `도구호출 trace 표시 "${it.rendering.toolCallDisplay}": 스트리밍에 \`{trace}\` 이벤트(도구명/인자/결과)를 추가해 UI에 단계로 렌더한다.`,
+      );
+    }
   }
   interactionExtra.push(
     `응답 ${it.streaming.enabled ? `스트리밍(속도 ${it.streaming.speed}, 인디케이터 ${it.streaming.indicator})` : "비스트리밍"}, 렌더링: 마크다운 ${yesno(it.rendering.markdown)}·인용 "${it.rendering.citationStyle}".`,

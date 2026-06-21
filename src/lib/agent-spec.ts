@@ -565,6 +565,8 @@ const IntegrationsSchema = z
         z.object({
           name: z.string(),
           description: z.string(),
+          // 도구 입력 스키마 (JSON Schema) — LLM tool-use 시 인자 선택에 사용. 없으면 빈 객체.
+          parameters: z.record(z.string(), z.unknown()).optional(),
         }),
       )
       .default([]),
