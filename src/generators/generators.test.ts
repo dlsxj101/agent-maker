@@ -60,6 +60,13 @@ describe("generateArtifacts — 파일 구성", () => {
     expect(m["src/tools.ts"]).toContain("export const TOOLS");
   });
 
+  it("안전 설정(rate limit/남용/입력길이)이 server 가드 미들웨어로 생성된다", () => {
+    const m = fileMap(generateArtifacts(toolAgentSpec, { now: FIXED_NOW }));
+    expect(m["src/server.ts"]).toContain("RATE_PER_MIN");
+    expect(m["src/server.ts"]).toContain("isAbusive");
+    expect(m["src/server.ts"]).toContain("너무 깁니다");
+  });
+
   it("멀티턴+스트리밍이면 세션 스토어 + SSE 엔드포인트 + answerStream 을 생성한다", () => {
     const m = fileMap(generateArtifacts(cloudSpec, { now: FIXED_NOW }));
     expect(m["src/chat.ts"]).toContain("SESSIONS");

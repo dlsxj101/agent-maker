@@ -95,7 +95,9 @@ export const toolAgentSpec: AgentSpec = createDraftSpec({
     toolPolicy: "confirm",
     maxSteps: 3,
     rendering: { toolCallDisplay: "expanded" },
+    inputLimits: { maxChars: 500 },
   },
+  agent: { safety: { rateLimitPerMin: 30, abuseFilter: true } },
   integrations: {
     tools: [
       { name: "search_minwon", description: "민원 사례/절차 검색" },

@@ -93,6 +93,35 @@ app.use((req, _res, next) => {
 });
 `
     : "";
+  // 채팅 가드 미들웨어 — rate limit / 입력 길이 / 남용 필터 (선택값에 따라 생성)
+  const rateLimit = spec.agent.safety.rateLimitPerMin;
+  const abuse = spec.agent.safety.abuseFilter;
+  const maxChars = spec.interaction.inputLimits.maxChars;
+  const guardChecks: string[] = [];
+  if (rateLimit) {
+    guardChecks.push(
+      `  const ip = req.ip ?? "unknown";\n  const now = Date.now();\n  const w = HITS.get(ip);\n  if (!w || now - w.t > 60000) HITS.set(ip, { n: 1, t: now });\n  else if (w.n >= RATE_PER_MIN) { res.status(429).json({ error: "요청이 너무 많습니다. 잠시 후 다시 시도하세요." }); return; }\n  else w.n++;`,
+    );
+  }
+  if (maxChars) {
+    guardChecks.push(
+      `  if (typeof req.body?.message === "string" && req.body.message.length > ${maxChars}) { res.status(400).json({ error: "메시지가 너무 깁니다(최대 ${maxChars}자)." }); return; }`,
+    );
+  }
+  if (abuse) {
+    guardChecks.push(
+      `  if (isAbusive(req.body?.message)) { res.status(400).json({ error: "부적절한 입력이 감지되었습니다." }); return; }`,
+    );
+  }
+  const guardMw = guardChecks.length
+    ? `
+${rateLimit ? `const RATE_PER_MIN = ${rateLimit};\nconst HITS = new Map<string, { n: number; t: number }>();\n` : ""}${abuse ? `// 남용 필터 — TODO: 금칙어/스팸 패턴을 기관 정책에 맞게 보강\nconst BANNED = [/(.)\\1{20,}/]; // 과도한 반복 등\nfunction isAbusive(m: unknown): boolean { return typeof m === "string" && BANNED.some((r) => r.test(m)); }\n` : ""}// 채팅 엔드포인트 공통 가드 (/api/chat, /api/chat/stream)
+app.use("/api/chat", (req, res, next) => {
+${guardChecks.join("\n")}
+  next();
+});
+`
+    : "";
   const streaming = spec.interaction.streaming.enabled;
   const streamRoute = streaming
     ? `
@@ -125,7 +154,7 @@ import { answer${streaming ? ", answerStream" : ""} } from "./chat.js";
 const app = express();
 app.use(express.json());
 app.use(express.static("public"));
-${auditMw}
+${auditMw}${guardMw}
 // 헬스체크 (acceptance: 200 반환)
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
