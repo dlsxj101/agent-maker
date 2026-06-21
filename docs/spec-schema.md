@@ -55,6 +55,9 @@ project: {
     public-cloud                       # 일반 클라우드
   }
   traffic?: enum{ low | medium | high }
+  docLang: enum{ ko | en }              # 산출물 문서 작성 언어 (ko 기본)
+                                        # PROMPT/DESIGN/CLAUDE/ARCHITECTURE/README 생성 언어.
+                                        # 챗봇 응답 언어(languages 필드)와 별개.
 }
 ```
 

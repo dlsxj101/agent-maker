@@ -268,7 +268,8 @@ OO부 정보화담당관 챗봇 프로젝트.
     "languages": [
       "ko"
     ],
-    "deployEnv": "on-premise-airgap"
+    "deployEnv": "on-premise-airgap",
+    "docLang": "ko"
   },
   "design": {
     "theme": "gov-gray",
@@ -1183,7 +1184,937 @@ OO광역시 민원봉사과 챗봇 프로젝트.
       "ko"
     ],
     "deployEnv": "gov-cloud",
-    "traffic": "medium"
+    "traffic": "medium",
+    "docLang": "ko"
+  },
+  "design": {
+    "theme": "gov-blue",
+    "colors": {
+      "primary": "#1F4E8C",
+      "secondary": "#3A6EA5",
+      "accent": "#1B998B",
+      "background": "#FFFFFF",
+      "surface": "#F5F7FA",
+      "text": "#1A1A1A",
+      "muted": "#6B7280",
+      "border": "#E5E7EB"
+    },
+    "mode": "light",
+    "fonts": {
+      "heading": "pretendard",
+      "body": "pretendard"
+    },
+    "widgetStyle": {
+      "bubbleRadius": "rounded",
+      "avatar": true,
+      "avatarStyle": "initials",
+      "align": "left",
+      "inputStyle": "box",
+      "density": "comfortable"
+    },
+    "layout": "floating-widget"
+  },
+  "frontend": {
+    "framework": "nextjs",
+    "embed": "standalone-page",
+    "responsive": true,
+    "a11yLevel": "kwcag-aa",
+    "localizeUi": false,
+    "rtl": false,
+    "channels": [
+      "web"
+    ],
+    "userAuth": "none"
+  },
+  "backend": {
+    "runtime": "node",
+    "auth": "session",
+    "deploy": "docker",
+    "network": "internet-allowed",
+    "logging": {
+      "audit": true
+    }
+  },
+  "database": {
+    "rdb": "postgres",
+    "history": "same-as-rdb",
+    "fileStore": "local"
+  },
+  "rag": {
+    "enabled": true,
+    "sources": [
+      "upload-pdf",
+      "upload-hwp"
+    ],
+    "ingest": {
+      "ocr": false,
+      "tables": false,
+      "images": false
+    },
+    "chunking": {
+      "strategy": "paragraph"
+    },
+    "embedding": "bge-m3",
+    "vectorDb": "pgvector",
+    "retrieval": {
+      "strategy": "hybrid"
+    },
+    "citations": true,
+    "accessControl": "none"
+  },
+  "llm": {
+    "provider": "claude",
+    "model": "claude-sonnet-4-6",
+    "serving": "official-api",
+    "params": {
+      "temperature": 0.3,
+      "maxTokens": 2048
+    },
+    "guardrails": {
+      "groundedOnly": true,
+      "piiFilter": true
+    },
+    "session": {
+      "multiTurn": true
+    }
+  },
+  "conversation": {
+    "persona": {
+      "tone": "formal",
+      "speaker": "OO시 안내"
+    },
+    "intents": [
+      {
+        "name": "증명서 발급 안내",
+        "examples": [
+          "주민등록등본 어떻게 떼나요?"
+        ]
+      }
+    ],
+    "fallback": {
+      "onUnknown": "handoff",
+      "handoff": "human-agent",
+      "showQueue": false
+    }
+  },
+  "interaction": {
+    "agentMode": "rag-cited",
+    "toolPolicy": "none",
+    "streaming": {
+      "enabled": true,
+      "speed": "normal",
+      "indicator": "dots"
+    },
+    "rendering": {
+      "markdown": true,
+      "codeBlocks": true,
+      "citationStyle": "chips",
+      "toolCallDisplay": "collapsed",
+      "showContextMeter": false
+    },
+    "output": {
+      "length": "balanced",
+      "structured": "none"
+    },
+    "welcome": {
+      "showSuggestions": true
+    },
+    "controls": [
+      "copy",
+      "feedback"
+    ],
+    "feedback": "thumbs",
+    "multimodal": [],
+    "voice": {
+      "stt": "none",
+      "tts": "none"
+    },
+    "disclaimer": {
+      "aiNotice": true,
+      "consent": false
+    },
+    "states": {},
+    "a11yControls": [],
+    "proactive": {
+      "followupSuggestions": false
+    },
+    "inputLimits": {}
+  },
+  "agent": {
+    "askUser": false,
+    "subAgents": {
+      "enabled": false,
+      "roles": []
+    },
+    "builtinTools": [],
+    "memory": {
+      "longTerm": false
+    },
+    "context": {
+      "autoCompact": false,
+      "strategy": "none"
+    },
+    "safety": {
+      "refusalStyle": "polite",
+      "abuseFilter": false
+    }
+  },
+  "integrations": {
+    "apis": [],
+    "tools": [],
+    "webhooks": []
+  },
+  "evaluation": {
+    "testset": [
+      {
+        "question": "주민등록등본 발급 방법은?",
+        "expectedSource": "민원편람.pdf"
+      },
+      {
+        "question": "운영 시간은 어떻게 되나요?"
+      }
+    ],
+    "metrics": [
+      "retrieval-hit",
+      "citation-accuracy"
+    ],
+    "abTesting": false
+  },
+  "compliance": {
+    "privacy": {
+      "collectsPii": false,
+      "masking": true
+    },
+    "security": {
+      "dataResidencyKR": true,
+      "networkSeparation": false
+    },
+    "a11y": "kwcag-aa"
+  },
+  "ops": {
+    "audit": true
+  }
+}
+",
+  "package.json": "{
+  "name": "oo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "@anthropic-ai/sdk": "^0.32.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "tsx": "^4.19.2",
+    "vitest": "^2.1.8",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.5"
+  }
+}
+",
+  "public/app.js": "// 최소 채팅 UI — /api/chat/stream (SSE 스트리밍) 호출. (PROMPT.md 지시로 디자인/접근성을 다듬는다)
+const SESSION_ID = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now());
+const form = document.getElementById("form");
+const log = document.getElementById("log");
+const input = document.getElementById("msg");
+
+function add(role, text) {
+  const el = document.createElement("div");
+  el.className = "bubble bubble--" + role;
+  el.textContent = text;
+  log.appendChild(el);
+  log.scrollTop = log.scrollHeight;
+  return el;
+}
+
+// 출처(인용) 칩 렌더 — citationStyle 에 맞게 다듬는다.
+function addSources(sources) {
+  if (!sources || !sources.length) return;
+  const row = document.createElement("div");
+  row.className = "sources";
+  for (const s of sources) {
+    const c = document.createElement("span");
+    c.className = "chip";
+    c.textContent = s;
+    row.appendChild(c);
+  }
+  log.appendChild(row);
+  log.scrollTop = log.scrollHeight;
+}
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const message = input.value.trim();
+  if (!message) return;
+  add("user", message);
+  input.value = "";
+  const bot = add("bot", "");
+  try {
+    const res = await fetch("/api/chat/stream", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message, sessionId: SESSION_ID }),
+    });
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const parts = buf.split("\\n\\n");
+      buf = parts.pop() || "";
+      for (const p of parts) {
+        const line = p.split("\\n").find((l) => l.startsWith("data:"));
+        if (!line) continue;
+        try {
+          const ev = JSON.parse(line.slice(5).trim());
+          if (ev.trace) add("trace", "🔧 도구 호출: " + ev.trace.tool);
+          if (ev.delta) bot.textContent += ev.delta;
+          if (ev.sources) addSources(ev.sources);
+        } catch (_) { /* skip */ }
+      }
+      log.scrollTop = log.scrollHeight;
+    }
+  } catch (_) {
+    bot.textContent = "오류가 발생했습니다.";
+  }
+});
+",
+  "public/index.html": "<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OO시 민원봇</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main class="chat" role="main" aria-label="챗봇 대화">
+    <header class="chat__header">OO시 민원봇</header>
+    <div id="log" class="chat__log" aria-live="polite"></div>
+    <form id="form" class="chat__form">
+      <label for="msg" class="sr-only">메시지 입력</label>
+      <input id="msg" name="msg" class="chat__input" placeholder="무엇을 도와드릴까요?" autocomplete="off" />
+      <button type="submit" class="chat__send">전송</button>
+    </form>
+  </main>
+  <script src="/app.js" type="module"></script>
+</body>
+</html>
+",
+  "public/styles.css": ":root {
+  --color-primary: #1F4E8C;
+  --color-secondary: #3A6EA5;
+  --color-accent: #1B998B;
+  --color-background: #FFFFFF;
+  --color-surface: #F5F7FA;
+  --color-text: #1A1A1A;
+  --color-muted: #6B7280;
+  --color-border: #E5E7EB;
+  --font-heading: 'Pretendard', system-ui, sans-serif;
+  --font-body: 'Pretendard', system-ui, sans-serif;
+  --bubble-radius: 12px;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; font-family: var(--font-body); color: var(--color-text); background: var(--color-background); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* 레이아웃: floating-widget */
+.chat { position: fixed; bottom: 24px; right: 24px; width: 360px; height: 520px; max-height: 80vh; box-shadow: 0 8px 30px rgba(0,0,0,.18); border-radius: 16px; overflow: hidden; }
+.chat { display: flex; flex-direction: column; background: var(--color-background); }
+.chat__header { font-family: var(--font-heading); font-weight: 700; padding: 16px; background: var(--color-primary); color: #fff; }
+.chat__log { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; background: var(--color-surface); }
+.bubble { max-width: 80%; padding: 10px 14px; border-radius: var(--bubble-radius); line-height: 1.5; }
+.bubble--user { align-self: flex-end; background: var(--color-primary); color: #fff; }
+.bubble--bot { align-self: flex-start; background: #fff; border: 1px solid var(--color-border); }
+.bubble--trace { align-self: flex-start; background: transparent; border: 1px dashed var(--color-border); color: var(--color-muted); font-size: 12px; font-family: var(--font-mono, monospace); }
+.sources { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 4px; }
+.chip { font-size: 11px; padding: 2px 8px; border: 1px solid var(--color-border); border-radius: 999px; color: var(--color-muted); background: var(--color-surface); }
+.chat__form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--color-border); }
+.chat__input { flex: 1; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 8px; font: inherit; }
+.chat__send { padding: 10px 16px; border: none; border-radius: 8px; background: var(--color-accent); color: #fff; cursor: pointer; }
+.chat__send:focus-visible, .chat__input:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+",
+  "src/chat.ts": "// 채팅 오케스트레이션: (RAG 검색) → LLM (스트리밍).
+// 동작: rag-cited / 멀티턴: true / 스트리밍: true / 인용: "chips".
+// 안전: 거절 "polite" · PII 마스킹.
+import { search } from "./rag/pipeline.js";
+import { complete, completeStream, type Msg } from "./llm/client.js";
+
+const GROUNDED_ONLY = true; // 근거 기반 답변 강제
+const STUB = process.env.LLM_STUB === "true"; // 테스트/오프라인: 실제 LLM 호출 없이 결정적 스텁
+
+// 멀티턴 세션 — sessionId 별 대화 이력(메모리). 운영은 DB/Redis 로 대체.
+const SESSIONS = new Map<string, Msg[]>();
+const HISTORY_MSGS = 20;
+function loadHistory(id?: string): Msg[] { return id ? SESSIONS.get(id) ?? [] : []; }
+function saveHistory(id: string | undefined, messages: Msg[], answerText: string): void {
+  if (!id) return;
+  const updated: Msg[] = [...messages, { role: "assistant", content: answerText }];
+  SESSIONS.set(id, updated.slice(-HISTORY_MSGS));
+}
+
+export interface ChatResult { answer: string; sources: string[]; }
+
+// 컨텍스트 구성: RAG 검색
+async function gather(message: string): Promise<{ contexts: string[]; sources: string[]; traces: { tool: string; result: unknown }[] }> {
+  const chunks = await search(message);
+  const contexts: string[] = chunks.map((c) => c.text);
+  const sources: string[] = chunks.map((c) => (c.page ? c.source + " p." + c.page : c.source));
+  const traces: { tool: string; result: unknown }[] = [];
+  return { contexts, sources, traces };
+}
+
+export async function answer(message: string, sessionId?: string): Promise<ChatResult> {
+  const { contexts, sources } = await gather(message);
+  const system = buildSystemPrompt(contexts);
+  const messages: Msg[] = [...loadHistory(sessionId), { role: "user", content: message }];
+  const raw = STUB
+    ? stubAnswer(message, contexts)
+    : await complete(system, messages);
+  const answerText = maskPii(raw);
+  saveHistory(sessionId, messages, answerText);
+  return { answer: answerText, sources };
+}
+
+// 스트리밍 응답 — (도구 trace) → 토큰 델타 → sources. (/api/chat/stream 에서 SSE 로 전송)
+export async function* answerStream(message: string, sessionId?: string): AsyncGenerator<{ delta?: string; sources?: string[] }> {
+  const { contexts, sources } = await gather(message);
+  const system = buildSystemPrompt(contexts);
+  const messages: Msg[] = [...loadHistory(sessionId), { role: "user", content: message }];
+  let full = "";
+  if (STUB) {
+    for (const tok of stubAnswer(message, contexts).split(/(\\s+)/)) { full += tok; yield { delta: tok }; }
+  } else {
+    for await (const d of completeStream(system, messages)) { full += d; yield { delta: d }; }
+  }
+  saveHistory(sessionId, messages, maskPii(full));
+  yield { sources };
+}
+
+function stubAnswer(message: string, contexts: string[]): string {
+  // 결정적 스텁 — 골든셋 플러밍용. 실제 동작은 complete()/completeStream() 가 담당한다.
+  const cite = contexts.length ? " (참고: " + contexts.join(", ") + ")" : "";
+  return '[STUB] "' + message + '" 문의에 대한 안내입니다.' + cite;
+}
+
+// 개인정보 마스킹 (piiFilter/masking) — TODO: 기관 정책에 맞게 패턴을 보강한다.
+function maskPii(text: string): string {
+  return text
+    .replace(/\\d{6}-\\d{7}/g, "******-*******") // 주민등록번호
+    .replace(/01[016789]-?\\d{3,4}-?\\d{4}/g, "***-****-****") // 휴대전화
+    .replace(/[\\w.+-]+@[\\w-]+\\.[\\w.-]+/g, "***@***"); // 이메일
+}
+
+function buildSystemPrompt(contexts: string[]): string {
+  // TODO: agent-spec.json 의 conversation.persona.systemPrompt 를 반영한다.
+  return [
+    "당신은 OO광역시의 안내 챗봇입니다.",
+    "톤: formal. 한국어로 정중히 답합니다.",
+    GROUNDED_ONLY ? "제공된 근거에 없는 내용은 추측하지 마세요." : "",
+    "답변이 불가능하면 정중히 사과하고 가능한 대안을 안내하세요.",
+    "개인정보(주민등록번호·전화·이메일 등)는 답변에 노출하지 마세요.",
+    contexts.length ? "참고 자료:\\n" + contexts.join("\\n---\\n") : "",
+  ]
+    .filter(Boolean)
+    .join("\\n");
+}
+",
+  "src/llm/client.ts": "// LLM 클라이언트 — Claude 공식 API. (키: ANTHROPIC_API_KEY)
+import Anthropic from "@anthropic-ai/sdk";
+
+export type Msg = { role: "user" | "assistant"; content: string };
+const MODEL = process.env.LLM_MODEL ?? "claude-sonnet-4-6";
+
+// 지연 초기화 — 키가 없어도 서버(/health)는 기동되도록 한다.
+let _client: Anthropic | null = null;
+function client(): Anthropic {
+  if (!_client) _client = new Anthropic();
+  return _client;
+}
+
+export async function complete(system: string, messages: Msg[]): Promise<string> {
+  const res = await client().messages.create({
+    model: MODEL,
+    max_tokens: 2048,
+    temperature: 0.3,
+    system,
+    messages,
+  });
+  const block = res.content[0];
+  return block && block.type === "text" ? block.text : "";
+}
+
+/** 스트리밍 — 토큰 델타를 순차 yield (streaming.enabled=true) */
+export async function* completeStream(system: string, messages: Msg[]): AsyncGenerator<string> {
+  const s = await client().messages.create({
+    model: MODEL, max_tokens: 2048, temperature: 0.3,
+    system, messages, stream: true,
+  });
+  for await (const ev of s) {
+    if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") yield ev.delta.text;
+  }
+}
+",
+  "src/rag/pipeline.ts": "// RAG 파이프라인 골격 — 적재→청킹→임베딩→검색. (실서비스 로직은 PROMPT.md 지시로 채움)
+// Vector DB: pgvector / 임베딩: bge-m3 / 검색: hybrid
+
+export interface Chunk { id: string; text: string; source: string; page?: number; }
+
+const CHUNK_SIZE = 800;
+const CHUNK_OVERLAP = 100;
+
+/** 1) 문서 적재 (소스: upload-pdf, upload-hwp) — 텍스트/마크다운은 그대로 읽는다.
+ *  PDF/HWP 등 바이너리는 변환 후(예: libreoffice→txt) 텍스트를 넘긴다. */
+export async function ingest(filePath: string): Promise<string> {
+  const { readFile } = await import("node:fs/promises");
+  if (/\\.(pdf|hwp|docx)$/i.test(filePath)) {
+    throw new Error("바이너리 문서는 텍스트로 변환 후 chunk()/index() 에 넘기세요 (예: libreoffice --convert-to txt).");
+  }
+  return readFile(filePath, "utf-8");
+}
+
+/** 2) 청킹 (전략: paragraph) — 문단 묶음 + 크기 상한 + 오버랩. */
+export function chunk(text: string, source = "uploaded"): Chunk[] {
+  const paras = text.split(/\\n\\s*\\n/).map((p) => p.trim()).filter(Boolean);
+  const out: Chunk[] = [];
+  let buf = "";
+  const flush = () => {
+    if (!buf) return;
+    out.push({ id: source + "#" + out.length, text: buf, source });
+    buf = buf.slice(Math.max(0, buf.length - CHUNK_OVERLAP)); // 오버랩 유지
+  };
+  for (const p of paras) {
+    if ((buf + "\\n\\n" + p).length > CHUNK_SIZE && buf) flush();
+    buf = buf ? buf + "\\n\\n" + p : p;
+    while (buf.length > CHUNK_SIZE) {
+      out.push({ id: source + "#" + out.length, text: buf.slice(0, CHUNK_SIZE), source });
+      buf = buf.slice(CHUNK_SIZE - CHUNK_OVERLAP);
+    }
+  }
+  if (buf) out.push({ id: source + "#" + out.length, text: buf, source });
+  return out;
+}
+
+// 개발용 인메모리 색인 (운영은 pgvector). index() 로 적재되고 search() 가 함께 조회한다.
+const INDEXED: Chunk[] = [];
+
+/** 3) 임베딩 + Vector DB 적재 — 개발: 인메모리. 운영: bge-m3 임베딩 후 pgvector upsert(TODO). */
+export async function index(chunks: Chunk[]): Promise<void> {
+  if (process.env.EMBEDDING_API_URL && process.env.DATABASE_URL) {
+    // TODO: 각 청크를 bge-m3 로 임베딩 → pgvector 에 upsert
+    console.warn("[rag] 실제 임베딩/적재 미구현 — 인메모리 색인에 보관합니다.");
+  }
+  INDEXED.push(...chunks);
+}
+
+// 개발/CI용 샘플 코퍼스(골든셋 파생). 실제 적재 구현 시 pgvector 검색으로 대체한다.
+const DEV_CORPUS: Chunk[] = [
+  { id: "d1", source: "민원편람.pdf", page: 1, text: "주민등록등본 발급 방법은?" },
+];
+
+/**
+ * 4) 검색 (hybrid) — 질문 관련 청크 반환.
+ * 운영: EMBEDDING_API_URL + DATABASE_URL 이 설정되면 실제 벡터 검색을 구현한다.
+ * 개발/CI(미설정): 샘플 코퍼스에 대한 키워드 겹침 검색으로 폴백한다(빈 결과 금지).
+ */
+export async function search(query: string, topK = 3): Promise<Chunk[]> {
+  const real = process.env.EMBEDDING_API_URL && process.env.DATABASE_URL;
+  if (real) {
+    // TODO: bge-m3 임베딩 + pgvector top-k 검색 구현
+    console.warn("[rag] 실제 벡터 검색 미구현 — 샘플 코퍼스로 폴백합니다.");
+  }
+  const terms = query.toLowerCase().split(/\\s+/).filter(Boolean);
+  const pool = [...INDEXED, ...DEV_CORPUS]; // 적재분 우선 + 골든셋 폴백
+  const scored = pool.map((c) => ({
+    c,
+    score: terms.reduce((s, t) => s + (c.text.toLowerCase().includes(t) ? 1 : 0), 0),
+  }));
+  const hits = scored.filter((x) => x.score > 0).sort((a, b) => b.score - a.score);
+  // 겹침이 없으면 최소 1건은 반환해 인용 경로가 끊기지 않게 한다.
+  return (hits.length ? hits : scored).slice(0, topK).map((x) => x.c);
+}
+",
+  "src/server.ts": "// 진입점 — 헬스체크 + 채팅 API 골격. (PROMPT.md 지시에 따라 로직을 채운다)
+import express from "express";
+import { answer, answerStream } from "./chat.js";
+
+const app = express();
+app.use(express.json());
+app.use(express.static("public"));
+
+// 감사 로그 미들웨어 (audit=true) — TODO: 보관소/포맷을 기관 정책에 맞게 (개인정보 주의)
+app.use((req, _res, next) => {
+  console.log(JSON.stringify({ ts: new Date().toISOString(), method: req.method, path: req.path }));
+  next();
+});
+
+// 헬스체크 (acceptance: 200 반환)
+app.get("/health", (_req, res) => res.json({ status: "ok" }));
+
+// 채팅: 사용자 질문 → (RAG 검색) → LLM 답변
+app.post("/api/chat", async (req, res) => {
+  const { message, sessionId } = req.body ?? {};
+  if (typeof message !== "string" || !message.trim()) {
+    res.status(400).json({ error: "message 가 필요합니다." });
+    return;
+  }
+  try {
+    const result = await answer(message, sessionId);
+    res.json(result);
+  } catch {
+    res.status(500).json({ error: "처리 중 오류가 발생했습니다." });
+  }
+});
+
+// 스트리밍 채팅 (SSE) — interaction.streaming.enabled=true
+app.post("/api/chat/stream", async (req, res) => {
+  const { message, sessionId } = req.body ?? {};
+  if (typeof message !== "string" || !message.trim()) {
+    res.status(400).json({ error: "message 가 필요합니다." });
+    return;
+  }
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  try {
+    for await (const ev of answerStream(message, sessionId)) {
+      res.write(\`data: \${JSON.stringify(ev)}\\n\\n\`);
+    }
+  } catch {
+    res.write('event: error\\ndata: {}\\n\\n');
+  }
+  res.write('event: done\\ndata: {}\\n\\n');
+  res.end();
+});
+
+const port = Number(process.env.PORT ?? 3000);
+app.listen(port, () => console.log(\`server on :\${port}\`));
+",
+  "tests/golden.test.ts": "// 평가 골든셋 테스트 골격. (acceptance: 통과해야 납품 가능)
+// 지표: retrieval-hit, citation-accuracy
+// 실행: LLM_STUB=true 로 플러밍을 먼저 검증하고, 구현 완료 후 실제 LLM 으로 재검증한다.
+import { describe, it, expect } from "vitest";
+import { answer } from "../src/chat.js";
+
+const GOLDEN: Array<{ question: string; expectedSource: string | null }> = [
+  { question: "주민등록등본 발급 방법은?", expectedSource: "민원편람.pdf" },
+  { question: "운영 시간은 어떻게 되나요?", expectedSource: null },
+];
+
+describe("골든셋 — 플러밍(LLM_STUB=true)", () => {
+  for (const tc of GOLDEN) {
+    it(tc.question, async () => {
+      const res = await answer(tc.question);
+      expect(typeof res.answer).toBe("string");
+      expect(res.answer.length).toBeGreaterThan(0);
+    });
+  }
+});
+
+// 인용/근거 정확도 — 검색 결과의 출처가 기대 출처를 포함하는지 검증한다.
+describe("골든셋 — 근거 정확도", () => {
+  for (const tc of GOLDEN.filter((t) => t.expectedSource)) {
+    it(\`출처 포함: \${tc.question} → \${tc.expectedSource}\`, async () => {
+      const res = await answer(tc.question);
+      expect(res.sources.some((s) => s.includes(tc.expectedSource!))).toBe(true);
+    });
+  }
+});
+",
+  "tsconfig.json": "{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src"]
+}
+",
+}
+`;
+
+exports[`산출물 다국어 (M7-C) > en 프로필 cloud 산출 스냅샷 (M7-C) 1`] = `
+{
+  ".env.example": "# 자동 생성된 환경변수 목록 — 실제 값으로 채운다
+PORT=3000
+# 테스트/오프라인: true 면 LLM 호출 없이 스텁 응답 사용
+LLM_STUB=false
+ANTHROPIC_API_KEY=
+LLM_MODEL=claude-sonnet-4-6
+DATABASE_URL=
+EMBEDDING_MODEL=bge-m3
+# 온프레미스 임베딩은 API 가 아니라 추론 서버가 필요하다 (ARCHITECTURE.md)
+EMBEDDING_API_URL=http://localhost:8080/embed
+",
+  ".gitignore": "node_modules/
+dist/
+.env
+*.log
+",
+  "ARCHITECTURE.md": "# Architecture (ARCHITECTURE.md)
+
+## Overall Structure
+
+- **Frontend**: Next.js (Standalone page)
+- **Backend**: Node.js / Auth Session / Network External internet allowed
+- **Deployment**: Docker container (Government cloud (G-Cloud etc.))
+- **Data**: RDB PostgreSQL / Files Local filesystem
+
+## RAG Pipeline
+
+\`\`\`
+[Knowledge sources: PDF upload, HWP (Korean doc) upload]
+   │ Ingest (OCR No / tables No)
+   ▼
+[Chunking: Paragraph]
+   ▼
+[Embedding: bge-m3] ──▶ [Vector DB: pgvector]
+   ▼
+[Retrieval: Hybrid (BM25 + vector)]
+   ▼
+[LLM: Claude Sonnet 4.6] ──▶ Answer (+ citations)
+\`\`\`
+
+> Embedding \`bge-m3\` requires a dedicated **inference server** (not a cloud API). Run it as a separate container/server and connect via \`EMBEDDING_API_URL\`. For air-gapped environments, include model weights in the offline installer package.
+>
+> **API contract (example)**: \`POST {EMBEDDING_API_URL}/embed\` body \`{ "text": "..." }\` → response \`{ "embedding": number[] }\`. Compatible with \`text-embeddings-inference\` (HuggingFace) or a custom FastAPI wrapper. When not configured, \`src/rag/pipeline.ts\` falls back to the sample corpus.
+
+
+## Security & Compliance
+
+- Data residency (South Korea): Yes
+- Network separation compliance: No
+- Audit log: Yes
+- Accessibility: KWCAG 2.2 Level AA
+
+## Operations
+
+- Multi-turn session: Yes
+- Admin dashboard: No
+",
+  "CLAUDE.md": "# CLAUDE.md — OO시 민원봇 Work Instructions
+
+> This file contains **work instructions for Claude Code operating in this chatbot project**.
+> See \`PROMPT.md\` for the implementation prompt and \`agent-spec.json\` for the full configuration.
+
+## 1. Project Overview
+
+- Organization: OO광역시 / Chatbot: OO시 민원봇
+- Purpose: Civil complaint guidance, FAQ
+- Deployment environment: Government cloud (G-Cloud etc.)
+
+## 2. Absolute Rules (Public Sector)
+
+- **Deployment environment**: Government cloud (G-Cloud etc.)
+- **Web accessibility**: KWCAG 2.2 Level AA compliance required (KWCAG 2.2)
+- **Personal data**: collection No, masking Yes
+- **Data residency (South Korea)**: Yes
+
+## 3. Stack
+
+- Frontend: Next.js / Embed: Standalone page
+- Backend: Node.js / Auth: Session / Deploy: Docker container
+- DB: PostgreSQL / File store: Local filesystem
+- LLM: Claude (Anthropic) · Claude Sonnet 4.6 · Official cloud API
+- RAG: pgvector + embedding bge-m3 + retrieval Hybrid (BM25 + vector)
+
+## 4. Working Principles
+
+- \`agent-spec.json\` is the single source of truth. When code and spec disagree, follow the spec.
+- Responses use a Formal / polite tone. Do not answer without supporting evidence (hallucination prevention). Include citations/page references in every answer.
+- Handle unknown questions with: "Transfer to agent".
+- All user-facing text must be in Korean; follow accessibility standard KWCAG 2.2 Level AA.
+
+## 5. Verification
+
+- After build/startup (\`/health\`), run the golden-set evaluation in \`tests/\` and confirm all cases pass.
+",
+  "DESIGN.md": "# Design System (DESIGN.md)
+
+> Visual decisions for "OO시 민원봇" codified as text. All UI implementation must follow these tokens.
+> Use CSS variables — never raw hex values.
+
+## Theme
+
+- **Preset**: 신뢰 블루
+- **Mode**: Light
+- **Layout**: Floating widget (bottom-right)
+
+## Color Tokens
+
+| Token | Value | Usage |
+|---|---|---|
+| \`--color-primary\` | \`#1F4E8C\` | Primary action / highlight |
+| \`--color-secondary\` | \`#3A6EA5\` | Secondary |
+| \`--color-accent\` | \`#1B998B\` | Accent |
+| \`--color-background\` | \`#FFFFFF\` | Background |
+| \`--color-surface\` | \`#F5F7FA\` | Card / bubble surface |
+| \`--color-text\` | \`#1A1A1A\` | Body text |
+| \`--color-muted\` | \`#6B7280\` | Supplementary text |
+| \`--color-border\` | \`#E5E7EB\` | Border |
+
+## Fonts
+
+- **Heading**: Pretendard (\`--font-heading\`)
+- **Body**: Pretendard (\`--font-body\`)
+
+## Chat Widget Style
+
+- Bubble radius: rounded (\`--bubble-radius\`)
+- Avatar: Yes
+- Bot bubble alignment: left
+- Input style: box
+- Density: comfortable
+
+## CSS Variables (copy and use as-is)
+
+\`\`\`css
+:root {
+  --color-primary: #1F4E8C;
+  --color-secondary: #3A6EA5;
+  --color-accent: #1B998B;
+  --color-background: #FFFFFF;
+  --color-surface: #F5F7FA;
+  --color-text: #1A1A1A;
+  --color-muted: #6B7280;
+  --color-border: #E5E7EB;
+  --font-heading: 'Pretendard', system-ui, sans-serif;
+  --font-body: 'Pretendard', system-ui, sans-serif;
+  --bubble-radius: 12px;
+}
+\`\`\`
+
+## Accessibility (KWCAG 2.2)
+
+- Target level: KWCAG 2.2 Level AA
+- Ensure sufficient text/background contrast, keyboard navigation, \`aria-*\` labels, and visible focus indicators by default.
+",
+  "Dockerfile": "FROM node:22-slim
+WORKDIR /app
+COPY package.json ./
+RUN npm install
+COPY . .
+RUN npm run build
+EXPOSE 3000
+CMD ["npm", "start"]
+",
+  "PROMPT.md": "# Implementation Instructions (Claude Code Master Prompt)
+
+> This file is the **first instruction to Claude Code**.
+> Open this folder and complete the following steps in order to build the chatbot **"OO시 민원봇"** for **OO광역시**.
+
+## 0. First — Public-Sector Constraints (Must Not Violate)
+
+- **Deployment environment**: Government cloud (G-Cloud etc.)
+- **Web accessibility**: KWCAG 2.2 Level AA compliance required (KWCAG 2.2)
+- **Personal data**: collection No, masking Yes
+- **Data residency (South Korea)**: Yes
+
+> Do not implement anything that conflicts with the constraints above. If a conflict is detected, stop and re-verify against \`agent-spec.json\`.
+
+## 1. What to Build
+
+- **Organization / Department**: OO광역시 / 민원봉사과
+- **Chatbot Name**: OO시 민원봇
+- **Purpose**: Civil complaint guidance, FAQ
+- **Target Users**: General public
+- **Operating Language(s)**: Korean
+- **Stack**: Next.js (frontend) / Node.js (backend) / RAG: pgvector + bge-m3 / LLM: Claude Sonnet 4.6
+
+## 2. Implementation Order (follow this order — verify at each step)
+
+1. **Verify project scaffold**: Read \`agent-spec.json\` (source of truth), \`DESIGN.md\`, \`ARCHITECTURE.md\`, and \`CLAUDE.md\` first. All decisions follow \`agent-spec.json\`.
+2. **Install dependencies & verify startup**: Install dependencies from the bundled manifests and confirm the entry point (\`/health\`) starts and returns 200. Fix any build or startup failures before proceeding. **In test/offline environments, use \`LLM_STUB=true\` to verify plumbing without real LLM calls**; place actual keys (e.g. \`ANTHROPIC_API_KEY\`) in \`.env\`.
+3. **Apply design tokens**: Apply the color/font/widget tokens from \`DESIGN.md\` to the UI. Use CSS variables instead of raw hex values. Layout: "Floating widget (bottom-right)". Bot avatar style: "initials".
+4. **Implement RAG pipeline**: ingest → chunk (Paragraph) → embed (bge-m3) → load into pgvector → retrieve (Hybrid (BM25 + vector)). Citations must be included. HWP (Korean word processor) has no standard Node parser — **recommended: convert with \`libreoffice --headless --convert-to txt\`** (include LibreOffice in the offline installer package for air-gapped environments). Log files that fail to convert. In development/CI (when \`EMBEDDING_API_URL\` or \`DATABASE_URL\` are not set), the sample corpus keyword fallback in \`src/rag/pipeline.ts\` is active (sufficient for golden-set runs). **Replace this with a real document ingestion and vector search implementation.** Embedding \`bge-m3\` requires a dedicated inference server — connect via the \`EMBEDDING_API_URL\` endpoint (see ARCHITECTURE.md).
+5. **Integrate LLM**: Claude (Anthropic) / model Claude Sonnet 4.6 / serving Official cloud API. System prompt tone: Formal / polite. Guardrails: grounded-only Yes, PII filter Yes. Multi-turn: accept \`sessionId\` in \`/api/chat\`, maintain per-session message history, and pass it to \`complete()\`. Streaming: \`/api/chat/stream\` (SSE, \`text/event-stream\`) sends token \`{delta}\` events (\`answerStream\`). Non-streaming uses \`/api/chat\` (JSON).
+6. **Implement conversation design**: persona, intents, quick replies, and fallback (Transfer to agent). If intents are empty, define representative scenarios from \`agent-spec.json\` → \`conversation\` before proceeding. Handoff to Human agent.
+7. **Implement interaction / behavior**. Agent mode: RAG-cited (retrieve → grounded answer with citations). Streaming response (speed: normal, indicator: dots), Rendering: markdown Yes · citation "chips". Output: length "balanced" · structure "none". Disclosures / consent: AI response notice. Chat controls: copy, feedback (feedback: thumbs).
+8. **Implement agent capabilities / safety**: Safety — refusal style: "polite". (Apply together with §7 guardrails.)
+9. **Validate golden set**: Run the bundled test scaffold (\`tests/\`) and ensure all \`evaluation\` golden-set cases pass. Adjust RAG or prompts if they fail.
+10. **Compliance check**: Accessibility (KWCAG 2.2 Level AA), PII masking (No), Audit log (Yes) — — verify final conformance. Fill in the bundled audit-log middleware and masking utility stubs to match the actual policy.
+
+## 3. Acceptance Criteria
+
+- [ ] Build and server startup succeed (\`/health\` returns 200)
+- [ ] Design tokens (colors, fonts, widget, layout) are applied to the UI
+- [ ] RAG search is operational and citations are included in answers
+- [ ] \`evaluation\` golden-set tests pass
+- [ ] Accessibility KWCAG 2.2 Level AA / privacy and audit-log requirements met
+
+## 4. Principles
+
+- **\`agent-spec.json\` is the source of truth.** When in doubt, consult it. If still unclear, choose the conservative (public-sector-safe) option.
+- Do not add features that were not selected (fixed scope → deterministic output).
+- Write all user-facing copy, error messages, and accessibility labels in Korean.
+",
+  "README.md": "# OO시 민원봇
+
+OO광역시 민원봉사과 chatbot project.
+
+> This folder contains artifacts generated by **agent-maker**. To begin implementation with Claude Code,
+> have it read \`PROMPT.md\` first.
+
+## What Is This
+
+- Purpose: Civil complaint guidance, FAQ
+- Target users: General public
+- Deployment environment: Government cloud (G-Cloud etc.)
+
+## Getting Started
+
+1. Open this folder in Claude Code.
+2. Follow the instructions in \`PROMPT.md\`. (Canonical config: \`agent-spec.json\`)
+3. After build/startup, run the golden-set evaluation in \`tests/\` and verify all cases pass.
+
+## Included Files
+
+- \`PROMPT.md\` — Claude Code implementation instructions
+- \`DESIGN.md\` — Design system (tokens)
+- \`ARCHITECTURE.md\` — Architecture
+- \`CLAUDE.md\` — Project work instructions
+- \`agent-spec.json\` — Full configuration (source of truth)
+- Scaffold code (\`src/\`, manifests, \`tests/\`, etc.)
+",
+  "agent-spec.json": "{
+  "meta": {
+    "specVersion": "1.0",
+    "generatorVersion": "0.1.0",
+    "createdAt": "2026-06-20T00:00:00.000Z"
+  },
+  "project": {
+    "org": "OO광역시",
+    "dept": "민원봉사과",
+    "name": "OO시 민원봇",
+    "purpose": [
+      "civil-complaint",
+      "faq"
+    ],
+    "audience": [
+      "citizen"
+    ],
+    "languages": [
+      "ko"
+    ],
+    "deployEnv": "gov-cloud",
+    "traffic": "medium",
+    "docLang": "en"
   },
   "design": {
     "theme": "gov-blue",

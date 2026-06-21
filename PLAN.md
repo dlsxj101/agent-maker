@@ -397,7 +397,8 @@ AgentSpec {
   - ✅ **M7-A OpenAI function-calling 루프**: Node `llm/client.ts` 의 OpenAI 호환 `completeWithTools` TODO 스텁 → 실제 `tools`(type:function)·`tool_calls`·`role:tool` 왕복 루프로 구현(Python 도 동등 구현). 생성물 `tsc` 클린 + 골든 통과.
   - ✅ **M7-D 스택 풀 패리티 + 검증**: Python(FastAPI)·Go(net/http, 의존성0)·Java(Spring Boot). 동일 REST 계약/멀티턴/RAG/가드/안전/PII/스트리밍. **실 검증 통과**: Python `py_compile`(×3 프로필)·Go `build+vet+test`(×3)·Java `mvn compile`+JUnit(×3)·Node-compat `tsc`+golden. 단위 테스트(스택 디스패치) 추가.
   - 📌 **현재 깊이 갭(정직)**: full = Node/Python(서버·chat·rag·스트리밍·tool-use 풀). 부분 = **Java 스트리밍·Go/Java tool-use 루프는 단발 complete 위임 골격**(server/chat/rag/guards/masking/multiturn 은 풀). Go 스트리밍은 풀(실 SSE 파싱). → 차기에 Go/Java tool-use·Java 스트리밍 심화.
-  - 🚧 **M7-C 산출물 다국어(docLang)**: 다음 작업.
+  - ✅ **M7-C 산출물 다국어(docLang)**: `project.docLang`(ko/en, 기본 ko) 신설. `src/generators/i18n.ts`(ko/en 문자열 테이블 `t(lang)`) + `format.ts` 영문 라벨(`LABELS_EN`, `label/labelList/yesno` 가 `lang` 인자) + `docs.ts` 5개 문서 언어 분기 + ProjectStep UI 토글. 기본 ko라 **기존 ko 스냅샷 산문 무변동**(agent-spec.json 에 docLang 필드만 추가) + en 스냅샷 신규. 65 테스트·tsc·lint 통과.
+  - 🏁 **M7 완료**: B/0/A/D/C 전부 반영. 남은 심화(Go/Java tool-use·Java 스트리밍 풀 구현, 마법사 UI 라벨 다국어)는 백로그.
 
 > **검증 루프 요약** (제품의 본질이므로 로드맵에 명시):
 > - 자동: 골든 산출물 스냅샷 테스트 · `AgentSpec` round-trip · 충돌 규칙 단위 테스트

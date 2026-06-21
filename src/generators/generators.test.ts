@@ -240,3 +240,43 @@ describe("골든 산출물 스냅샷", () => {
     expect(fileMap(generateArtifacts(airgapSpec, { now: FIXED_NOW }))).toMatchSnapshot();
   });
 });
+
+describe("산출물 다국어 (M7-C)", () => {
+  /** docLang:"en" 으로 생성한 cloud 스펙 */
+  const cloudEnSpec = createDraftSpec({
+    ...cloudSpec,
+    project: { ...cloudSpec.project, docLang: "en" as const },
+  });
+
+  it("docLang:'en' 이면 PROMPT.md 에 영어 헤더가 포함된다", () => {
+    const m = fileMap(generateArtifacts(cloudEnSpec, { now: FIXED_NOW }));
+    expect(m["PROMPT.md"]).toContain("Implementation Instructions (Claude Code Master Prompt)");
+    expect(m["PROMPT.md"]).toContain("What to Build");
+    expect(m["PROMPT.md"]).toContain("Acceptance Criteria");
+  });
+
+  it("docLang:'en' 이면 PROMPT.md 에 한국어 헤더가 없다", () => {
+    const m = fileMap(generateArtifacts(cloudEnSpec, { now: FIXED_NOW }));
+    expect(m["PROMPT.md"]).not.toContain("구현 지시 (Claude Code 마스터 프롬프트)");
+    expect(m["PROMPT.md"]).not.toContain("무엇을 만드는가");
+    expect(m["PROMPT.md"]).not.toContain("완료 기준");
+  });
+
+  it("docLang:'en' 이면 DESIGN.md·CLAUDE.md·ARCHITECTURE.md·README.md 도 영어로 생성된다", () => {
+    const m = fileMap(generateArtifacts(cloudEnSpec, { now: FIXED_NOW }));
+    expect(m["DESIGN.md"]).toContain("Design System (DESIGN.md)");
+    expect(m["CLAUDE.md"]).toContain("Work Instructions");
+    expect(m["ARCHITECTURE.md"]).toContain("Architecture (ARCHITECTURE.md)");
+    expect(m["README.md"]).toContain("Getting Started");
+  });
+
+  it("docLang 기본값(ko)은 한국어 산출물을 생성한다", () => {
+    const m = fileMap(generateArtifacts(cloudSpec, { now: FIXED_NOW }));
+    expect(m["PROMPT.md"]).toContain("구현 지시 (Claude Code 마스터 프롬프트)");
+    expect(m["PROMPT.md"]).not.toContain("Implementation Instructions");
+  });
+
+  it("en 프로필 cloud 산출 스냅샷 (M7-C)", () => {
+    expect(fileMap(generateArtifacts(cloudEnSpec, { now: FIXED_NOW }))).toMatchSnapshot();
+  });
+});

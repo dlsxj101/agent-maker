@@ -47,6 +47,10 @@ export const AUDIENCES = [
 
 export const LANGUAGES = ["ko", "en", "multi"] as const;
 
+/** 산출물 문서(PROMPT/DESIGN/CLAUDE/ARCHITECTURE/README) 작성 언어 (M7-C).
+ *  챗봇이 응답할 언어(project.languages)와는 별개로, Claude Code 에 줄 산출 문서의 언어다. */
+export const DOC_LANGS = ["ko", "en"] as const;
+
 export const DEPLOY_ENVS = [
   "on-premise-airgap", // 폐쇄망(완전 분리)
   "network-separated", // 망분리
@@ -191,6 +195,8 @@ const ProjectSchema = z
     languages: z.array(z.enum(LANGUAGES)).default(["ko"]),
     deployEnv: z.enum(DEPLOY_ENVS).default("gov-cloud"),
     traffic: z.enum(TRAFFIC_LEVELS).optional(),
+    /** 산출물 문서 작성 언어 (ko=한국어 기본 / en=영어). M7-C */
+    docLang: z.enum(DOC_LANGS).default("ko"),
   })
   .prefault({});
 

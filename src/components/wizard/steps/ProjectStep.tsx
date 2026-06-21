@@ -3,11 +3,13 @@
 /**
  * Step 0 — 기관/프로젝트 기본 정보. M3 기본 입력(텍스트/셀렉트/체크박스).
  * 시각적 카드 UI 고도화는 M4. 모든 값은 store 의 project 섹션에 즉시 반영된다.
+ * M7-C: docLang(산출물 문서 언어) 선택기 추가.
  */
 
 import { useWizardStore } from "@/lib/store";
-import { DEPLOY_ENVS, PURPOSES } from "@/lib/agent-spec";
+import { DEPLOY_ENVS, DOC_LANGS, PURPOSES } from "@/lib/agent-spec";
 import { label } from "@/generators/format";
+import { OptionCards } from "../controls";
 
 export function ProjectStep() {
   const project = useWizardStore((s) => s.spec.project);
@@ -83,6 +85,25 @@ export function ProjectStep() {
           })}
         </div>
       </Field>
+      <OptionCards
+        label="산출물 문서 언어"
+        hint="산출물(PROMPT/DESIGN/CLAUDE/ARCHITECTURE/README)을 한국어 또는 영어로 생성합니다. 챗봇 응답 언어와는 별개입니다."
+        value={project.docLang ?? "ko"}
+        onChange={(v: (typeof DOC_LANGS)[number]) => update("project", { docLang: v })}
+        options={[
+          {
+            id: "ko" as const,
+            label: "한국어",
+            description: "산출물 문서를 한국어로 생성합니다 (기본값)",
+          },
+          {
+            id: "en" as const,
+            label: "English (영어)",
+            description: "Generate output documents in English",
+          },
+        ]}
+        columns={2}
+      />
     </div>
   );
 }

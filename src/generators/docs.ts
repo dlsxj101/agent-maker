@@ -9,18 +9,22 @@
  *  - README.md       : 사람용 개요/실행법
  *
  * 모든 문서는 **결정적(deterministic)** 이다(동일 spec → 동일 텍스트). 시각 결정을 텍스트로 고정한다.
+ * `spec.project.docLang` 으로 ko/en 분기 (M7-C). 구조·순서는 언어에 무관하게 동일하다.
  */
 
 import type { AgentSpec } from "@/lib/agent-spec";
 import { THEME_PRESETS, FONT_OPTIONS, LLM_MODEL_CATALOG } from "@/catalog";
 import { label, labelList, yesno } from "./format";
 import { designTokens, tokensToCss } from "./tokens";
+import { t, type Lang } from "./i18n";
 
 /* ----------------------------- 공통 조회 ----------------------------------- */
 
 function themeLabel(spec: AgentSpec): string {
-  if (spec.design.theme === "custom") return "커스텀";
-  return THEME_PRESETS.find((t) => t.id === spec.design.theme)?.label ?? spec.design.theme;
+  if (spec.design.theme === "custom") {
+    return spec.project.docLang === "en" ? "Custom" : "커스텀";
+  }
+  return THEME_PRESETS.find((th) => th.id === spec.design.theme)?.label ?? spec.design.theme;
 }
 function fontLabel(id: string): string {
   return FONT_OPTIONS.find((f) => f.id === id)?.label ?? id;
@@ -30,21 +34,20 @@ function modelLabel(id: string): string {
 }
 
 /** 공공기관 제약 요약 (여러 문서에서 재사용) */
-function constraintLines(spec: AgentSpec): string[] {
+function constraintLines(spec: AgentSpec, lang: Lang): string[] {
+  const s = t(lang);
   const lines: string[] = [];
-  lines.push(`- **배포 환경**: ${label("deployEnv", spec.project.deployEnv)}`);
+  lines.push(`- ${s.prompt.constraint_deploy(label("deployEnv", spec.project.deployEnv, lang))}`);
   if (spec.project.deployEnv === "on-premise-airgap" || spec.backend.network === "offline") {
-    lines.push("  - ⚠️ 외부 인터넷 호출 불가 — 모든 모델/임베딩/의존성은 온프레미스 또는 사내망으로 해결한다.");
+    lines.push(s.prompt.constraint_airgap);
   }
-  lines.push(`- **웹 접근성**: ${label("a11yLevel", spec.frontend.a11yLevel)} 준수 (KWCAG 2.2)`);
+  lines.push(`- ${s.prompt.constraint_a11y(label("a11yLevel", spec.frontend.a11yLevel, lang))}`);
   lines.push(
-    `- **개인정보**: 수집 ${yesno(spec.compliance.privacy.collectsPii)}, 마스킹 ${yesno(
-      spec.compliance.privacy.masking,
-    )}`,
+    `- ${s.prompt.constraint_pii(yesno(spec.compliance.privacy.collectsPii, lang), yesno(spec.compliance.privacy.masking, lang))}`,
   );
-  lines.push(`- **데이터 국내 보관**: ${yesno(spec.compliance.security.dataResidencyKR)}`);
+  lines.push(`- ${s.prompt.constraint_residency(yesno(spec.compliance.security.dataResidencyKR, lang))}`);
   if (spec.compliance.procurement?.domesticPreferred) {
-    lines.push("- **조달**: 국산/오픈소스 우선");
+    lines.push(`- ${s.prompt.constraint_domestic}`);
   }
   return lines;
 }
@@ -52,293 +55,349 @@ function constraintLines(spec: AgentSpec): string[] {
 /* ------------------------------ PROMPT.md ---------------------------------- */
 
 export function renderPromptMd(spec: AgentSpec): string {
+  const lang: Lang = spec.project.docLang === "en" ? "en" : "ko";
+  const s = t(lang);
   const ragOn = spec.rag.enabled;
   const steps: string[] = [];
   let n = 1;
+
+  // 단계 1: 골격 확인
+  const step1Title = lang === "en" ? "Verify project scaffold" : "프로젝트 골격 확인";
+  const step1Body =
+    lang === "en"
+      ? "Read `agent-spec.json` (source of truth), `DESIGN.md`, `ARCHITECTURE.md`, and `CLAUDE.md` first. All decisions follow `agent-spec.json`."
+      : "이 폴더의 `agent-spec.json`(정본), `DESIGN.md`, `ARCHITECTURE.md`, `CLAUDE.md`를 먼저 읽는다. 모든 결정은 `agent-spec.json`을 따른다.";
+  steps.push(`${n++}. **${step1Title}**: ${step1Body}`);
+
+  // 단계 2: 의존성 설치
+  steps.push(`${n++}. ${s.prompt.step_deps}`);
+
+  // 단계 3: 디자인 토큰
   steps.push(
-    `${n++}. **프로젝트 골격 확인**: 이 폴더의 \`agent-spec.json\`(정본), \`DESIGN.md\`, \`ARCHITECTURE.md\`, \`CLAUDE.md\`를 먼저 읽는다. 모든 결정은 \`agent-spec.json\`을 따른다.`,
+    `${n++}. ${s.prompt.step_design(
+      label("layout", spec.design.layout, lang),
+      spec.design.widgetStyle.avatar,
+      spec.design.widgetStyle.avatarStyle,
+    )}`,
   );
-  steps.push(
-    `${n++}. **의존성 설치 & 기동 검증**: 동봉된 매니페스트로 의존성을 설치하고, 진입점(\`/health\`)이 떠서 200을 반환하는지 확인한다. 여기서 빌드/기동이 깨지면 먼저 고친다. **테스트/오프라인 환경에서는 \`LLM_STUB=true\`로 실제 LLM 호출 없이 플러밍을 검증**하고, 실제 키(예: \`ANTHROPIC_API_KEY\`)는 \`.env\`에 둔다.`,
-  );
-  steps.push(
-    `${n++}. **디자인 토큰 적용**: \`DESIGN.md\`의 컬러/폰트/위젯 토큰을 UI에 반영한다. 색은 직접 hex가 아니라 CSS 변수로 쓴다. 레이아웃은 "${label(
-      "layout",
-      spec.design.layout,
-    )}".${spec.design.widgetStyle.avatar ? ` 봇 아바타 스타일 "${spec.design.widgetStyle.avatarStyle}".` : ""}`,
-  );
+
   // 배포 채널 / 프론트 옵션
   const fe = spec.frontend;
   if (fe.channels.length > 1 || fe.channels[0] !== "web" || fe.localizeUi || fe.rtl || fe.userAuth !== "none") {
-    const chParts: string[] = [`배포 채널: ${fe.channels.join(", ")}`];
+    const chParts: string[] = [
+      lang === "en"
+        ? `Deploy channels: ${fe.channels.join(", ")}`
+        : `배포 채널: ${fe.channels.join(", ")}`,
+    ];
     if (fe.channels.some((c) => c.startsWith("kakao")))
-      chParts.push("카카오 채널/알림톡은 비즈니스 채널 등록 + 메시지 템플릿 심사가 필요하니 연동 어댑터를 둔다");
-    if (fe.userAuth !== "none") chParts.push(`이용자 본인확인 "${fe.userAuth}"(민감 민원 전 신원 확인)`);
-    if (fe.localizeUi) chParts.push("UI 문구 다국어 현지화(i18n 리소스 분리)");
-    if (fe.rtl) chParts.push("RTL 레이아웃 지원");
-    steps.push(`${n++}. **배포 채널/프론트 반영**: ${chParts.join(". ")}.`);
+      chParts.push(s.prompt.step_channel_kakao);
+    if (fe.userAuth !== "none") chParts.push(s.prompt.step_channel_auth(fe.userAuth));
+    if (fe.localizeUi) chParts.push(s.prompt.step_channel_localize);
+    if (fe.rtl) chParts.push(s.prompt.step_channel_rtl);
+    steps.push(`${n++}. ${s.prompt.step_channel_prefix}: ${chParts.join(". ")}.`);
   }
+
+  // RAG 파이프라인
   if (ragOn) {
     const ragExtra: string[] = [];
     if (spec.rag.sources.includes("upload-hwp")) {
-      ragExtra.push(
-        "HWP(한글)는 표준 Node 파서가 없다 — **권장: `libreoffice --headless --convert-to txt`로 변환 후 텍스트 추출**(폐쇄망은 libreoffice를 오프라인 설치 패키지에 포함). 변환 실패 파일은 적재 로그에 남긴다.",
-      );
+      ragExtra.push(s.prompt.step_rag_hwp);
     }
-    ragExtra.push(
-      "개발/CI(`EMBEDDING_API_URL`·`DATABASE_URL` 미설정)에서는 `src/rag/pipeline.ts`의 샘플 코퍼스 키워드 폴백으로 동작한다(골든셋 통과용). **실제 문서 적재 + 벡터 검색 구현으로 반드시 이를 대체**한다.",
-    );
+    ragExtra.push(s.prompt.step_rag_dev_fallback);
     if (["bge-m3", "kure", "ko-sroberta", "multilingual-e5"].includes(spec.rag.embedding)) {
-      ragExtra.push(
-        `임베딩 \`${spec.rag.embedding}\`은 API가 아니라 별도 추론 서버가 필요하다 — \`EMBEDDING_API_URL\` 엔드포인트로 연결한다(ARCHITECTURE 참조).`,
-      );
+      ragExtra.push(s.prompt.step_rag_server(spec.rag.embedding));
     }
-    steps.push(
-      `${n++}. **RAG 파이프라인 구현**: 적재→청킹(${label(
-        "chunking",
-        spec.rag.chunking.strategy,
-      )})→임베딩(${spec.rag.embedding})→${label(
-        "vectorDb",
-        spec.rag.vectorDb,
-      )} 적재→검색(${label("retrieval", spec.rag.retrieval.strategy)}). 답변에는 출처/페이지를 ${
-        spec.rag.citations ? "반드시 표기한다" : "표기하지 않는다"
-      }. RAG 골격 stub(\`src/rag/pipeline.ts\`)의 함수 시그니처를 채운다. \`search()\`가 빈 결과를 그대로 반환하지 않도록 한다.${
-        spec.rag.accessControl !== "none"
-          ? ` 문서 접근 제어 "${spec.rag.accessControl}": 이용자 신원/권한으로 검색 결과를 필터링한다(공개/내부 문서 구분).`
-          : ""
-      }${ragExtra.length ? " " + ragExtra.join(" ") : ""}`,
-    );
-  }
-  steps.push(
-    `${n++}. **LLM 연동**: ${label("provider", spec.llm.provider)} / 모델 ${modelLabel(
-      spec.llm.model,
-    )} / 호출 방식 ${label(
-      "serving",
-      spec.llm.serving,
-    )}. 시스템 프롬프트는 ${label("tone", spec.conversation.persona.tone)} 톤. 가드레일: 근거기반 ${yesno(
-      spec.llm.guardrails.groundedOnly,
-    )}, 민감정보 필터 ${yesno(spec.llm.guardrails.piiFilter)}.${
-      spec.llm.session.multiTurn
-        ? ` 멀티턴: \`/api/chat\`에 \`sessionId\`를 받아 세션별 대화 이력(messages 배열)을 유지해 \`complete()\`에 함께 전달한다${spec.llm.session.historyTurns ? `(최근 ${spec.llm.session.historyTurns}턴)` : ""}.`
-        : ""
-    }${spec.interaction.streaming.enabled ? ` 스트리밍: \`/api/chat/stream\`(SSE, \`text/event-stream\`)이 토큰 \`{delta}\` 이벤트를 전송한다(\`answerStream\`). 비스트리밍은 \`/api/chat\`(JSON).` : ""}`,
-  );
-  steps.push(
-    `${n++}. **대화 설계 반영**: 페르소나/인텐트/빠른응답/폴백(${label(
-      "onUnknown",
-      spec.conversation.fallback.onUnknown,
-    )})을 구현한다. 인텐트가 비어 있으면 \`agent-spec.json\`의 \`conversation\`을 보고 대표 시나리오를 먼저 정의한다.${
-      spec.conversation.fallback.handoff && spec.conversation.fallback.handoff !== "none"
-        ? ` 상담사 연결(${spec.conversation.fallback.handoff})${spec.conversation.fallback.handoffSlaMin ? `, 목표 ${spec.conversation.fallback.handoffSlaMin}분 내` : ""}${spec.conversation.fallback.showQueue ? ", 대기열 순번/대기시간 표시" : ""}.`
-        : ""
-    }`,
-  );
-  const it = spec.interaction;
-  const modeLabel = {
-    chatbot: "일반 챗봇(모델 단독 대화)",
-    "tool-agent": "도구호출 에이전트(추론→도구 호출→관찰 반복, trace 표시)",
-    "rag-cited": "RAG 인용형(검색→근거 기반 답변+출처)",
-    workflow: "워크플로우 가이드(단계별 입력/분기)",
-  }[it.agentMode];
-  const interactionExtra: string[] = [];
-  if (it.agentMode === "tool-agent") {
-    const toolList = spec.integrations.tools.length
-      ? spec.integrations.tools.map((t) => `\`${t.name}\`(${t.description})`).join(", ")
-      : "(integrations.tools 미정의 — 먼저 도구를 정의하라)";
-    interactionExtra.push(
-      `에이전트 루프(최대 ${it.maxSteps ?? 5}회${it.parallelTools ? ", 병렬" : ""}): 도구 = ${toolList}.`,
-    );
-    interactionExtra.push(
-      `실제 LLM tool-use 로 구현한다 — \`src/tools.ts\`의 \`TOOL_DEFS\`(Anthropic \`tools\` 형식, input_schema 포함)를 \`messages.create({ tools })\`에 전달하고, \`stop_reason==="tool_use"\`면 \`TOOLS\`로 실행→\`tool_result\` 회신→반복. (스캐폴드의 단순 루프를 이 방식으로 대체)`,
-    );
-    if (it.toolPolicy === "confirm") {
-      interactionExtra.push(
-        `도구 실행 정책 "confirm"(HITL): 도구 실행 전 사용자 승인을 받는다 — \`/api/chat\`가 \`{ type:"awaiting_confirmation", toolName, toolArgs, confirmToken }\`를 반환하고, 프론트 승인 후 \`/api/chat/confirm\`(스텁 동봉)으로 실행한다.`,
+    const citeNote = spec.rag.citations
+      ? s.prompt.step_rag_cite_yes
+      : s.prompt.step_rag_cite_no;
+    const accessNote =
+      spec.rag.accessControl !== "none"
+        ? s.prompt.step_rag_access(spec.rag.accessControl)
+        : "";
+
+    if (lang === "en") {
+      steps.push(
+        `${n++}. **Implement RAG pipeline**: ingest → chunk (${label("chunking", spec.rag.chunking.strategy, lang)}) → embed (${spec.rag.embedding}) → load into ${label("vectorDb", spec.rag.vectorDb, lang)} → retrieve (${label("retrieval", spec.rag.retrieval.strategy, lang)}). Citations ${citeNote}.${accessNote}${ragExtra.length ? " " + ragExtra.join(" ") : ""}`,
       );
     } else {
-      interactionExtra.push(`도구 실행 정책 "${it.toolPolicy}".`);
-    }
-    if (it.rendering.toolCallDisplay !== "hidden") {
-      interactionExtra.push(
-        `도구호출 trace 표시 "${it.rendering.toolCallDisplay}": 스트리밍에 \`{trace}\` 이벤트(도구명/인자/결과)를 추가해 UI에 단계로 렌더한다.`,
+      steps.push(
+        `${n++}. **RAG 파이프라인 구현**: 적재→청킹(${label("chunking", spec.rag.chunking.strategy, lang)})→임베딩(${spec.rag.embedding})→${label("vectorDb", spec.rag.vectorDb, lang)} 적재→검색(${label("retrieval", spec.rag.retrieval.strategy, lang)}). 답변에는 출처/페이지를 ${citeNote}. RAG 골격 stub(\`src/rag/pipeline.ts\`)의 함수 시그니처를 채운다. \`search()\`가 빈 결과를 그대로 반환하지 않도록 한다.${accessNote}${ragExtra.length ? " " + ragExtra.join(" ") : ""}`,
       );
     }
   }
+
+  // LLM 연동
+  const llmServing = label("serving", spec.llm.serving, lang);
+  const llmProvider = label("provider", spec.llm.provider, lang);
+  const llmTone = label("tone", spec.conversation.persona.tone, lang);
+  const multiturnNote = spec.llm.session.multiTurn
+    ? s.prompt.step_llm_multiturn(spec.llm.session.historyTurns)
+    : "";
+  const streamNote = spec.interaction.streaming.enabled ? s.prompt.step_llm_stream : "";
+
+  if (lang === "en") {
+    steps.push(
+      `${n++}. **Integrate LLM**: ${llmProvider} / model ${modelLabel(spec.llm.model)} / serving ${llmServing}. System prompt tone: ${llmTone}. Guardrails: grounded-only ${yesno(spec.llm.guardrails.groundedOnly, lang)}, PII filter ${yesno(spec.llm.guardrails.piiFilter, lang)}.${multiturnNote}${streamNote}`,
+    );
+  } else {
+    steps.push(
+      `${n++}. **LLM 연동**: ${llmProvider} / 모델 ${modelLabel(spec.llm.model)} / 호출 방식 ${llmServing}. 시스템 프롬프트는 ${llmTone} 톤. 가드레일: 근거기반 ${yesno(spec.llm.guardrails.groundedOnly, lang)}, 민감정보 필터 ${yesno(spec.llm.guardrails.piiFilter, lang)}.${multiturnNote}${streamNote}`,
+    );
+  }
+
+  // 대화 설계
+  const fallbackLabel = label("onUnknown", spec.conversation.fallback.onUnknown, lang);
+  // handoff 타입: en은 번역 라벨, ko는 원문 id (기존 동작 유지)
+  const handoffTypeDisplay =
+    lang === "en"
+      ? label("handoff", spec.conversation.fallback.handoff, lang)
+      : (spec.conversation.fallback.handoff ?? "");
+  const handoffNote =
+    spec.conversation.fallback.handoff && spec.conversation.fallback.handoff !== "none"
+      ? s.prompt.step_conv_handoff(
+          handoffTypeDisplay,
+          spec.conversation.fallback.handoffSlaMin,
+          spec.conversation.fallback.showQueue,
+        )
+      : "";
+
+  if (lang === "en") {
+    steps.push(
+      `${n++}. **Implement conversation design**: persona, intents, quick replies, and fallback (${fallbackLabel}).${s.prompt.step_conv_noIntent}${handoffNote}`,
+    );
+  } else {
+    steps.push(
+      `${n++}. **대화 설계 반영**: 페르소나/인텐트/빠른응답/폴백(${fallbackLabel})을 구현한다.${s.prompt.step_conv_noIntent}${handoffNote}`,
+    );
+  }
+
+  // 상호작용/동작 방식
+  const it = spec.interaction;
+  const modeLabel = s.prompt.agentModes[it.agentMode] ?? it.agentMode;
+  const interactionExtra: string[] = [];
+
+  if (it.agentMode === "tool-agent") {
+    const toolList = spec.integrations.tools.length
+      ? spec.integrations.tools.map((tool) => `\`${tool.name}\`(${tool.description})`).join(", ")
+      : lang === "en"
+        ? "(no tools defined in integrations.tools — define tools first)"
+        : "(integrations.tools 미정의 — 먼저 도구를 정의하라)";
+    interactionExtra.push(s.prompt.step_toolagent_loop(it.maxSteps ?? 5, !!it.parallelTools, toolList));
+    interactionExtra.push(s.prompt.step_toolagent_impl);
+    if (it.toolPolicy === "confirm") {
+      interactionExtra.push(s.prompt.step_toolagent_confirm);
+    } else {
+      interactionExtra.push(s.prompt.step_toolagent_policy(it.toolPolicy));
+    }
+    if (it.rendering.toolCallDisplay !== "hidden") {
+      interactionExtra.push(s.prompt.step_toolagent_trace(it.rendering.toolCallDisplay));
+    }
+  }
+
+  const streamPart = it.streaming.enabled
+    ? s.prompt.step_interaction_stream(it.streaming.speed, it.streaming.indicator)
+    : s.prompt.step_interaction_nostream;
   interactionExtra.push(
-    `응답 ${it.streaming.enabled ? `스트리밍(속도 ${it.streaming.speed}, 인디케이터 ${it.streaming.indicator})` : "비스트리밍"}, 렌더링: 마크다운 ${yesno(it.rendering.markdown)}·인용 "${it.rendering.citationStyle}".`,
+    `${streamPart}, ${s.prompt.step_interaction_render(yesno(it.rendering.markdown, lang), it.rendering.citationStyle)}`,
   );
   interactionExtra.push(
-    `출력 형식: 길이 "${it.output.length}"·구조 "${it.output.structured}"${it.rendering.showContextMeter ? ", 컨텍스트 사용량 미터 표시" : ""}.`,
+    `${s.prompt.step_interaction_output(it.output.length, it.output.structured)}${it.rendering.showContextMeter ? s.prompt.step_interaction_meter : ""}.`,
   );
+
   if (it.multimodal.length) {
-    interactionExtra.push(`멀티모달: ${it.multimodal.join(", ")} (접근성 연계).`);
+    interactionExtra.push(s.prompt.step_interaction_multimodal(it.multimodal.join(", ")));
   }
   if (it.voice.stt !== "none" || it.voice.tts !== "none") {
     interactionExtra.push(
-      `음성 엔진: STT ${label("voice", it.voice.stt)}·TTS ${label("voice", it.voice.tts)}.`,
+      s.prompt.step_interaction_voice(label("voice", it.voice.stt, lang), label("voice", it.voice.tts, lang)),
     );
   }
   if (it.disclaimer.aiNotice || it.disclaimer.consent) {
-    interactionExtra.push(
-      `고지/동의: ${[it.disclaimer.aiNotice && "AI 답변 고지", it.disclaimer.consent && "이용 동의 필요"].filter(Boolean).join(", ")}.`,
-    );
+    const disclaimerParts = [
+      it.disclaimer.aiNotice && s.prompt.step_interaction_ainotice,
+      it.disclaimer.consent && s.prompt.step_interaction_consent,
+    ]
+      .filter(Boolean)
+      .join(", ");
+    interactionExtra.push(s.prompt.step_interaction_disclaimer(disclaimerParts));
   }
   if (it.a11yControls.length) {
-    interactionExtra.push(`접근성 컨트롤: ${it.a11yControls.join(", ")} (KWCAG).`);
+    interactionExtra.push(s.prompt.step_interaction_a11y(it.a11yControls.join(", ")));
   }
   if (it.proactive.followupSuggestions || it.proactive.reengageAfterMin) {
-    interactionExtra.push(
-      `능동: ${[it.proactive.followupSuggestions && "후속 질문 추천", it.proactive.reengageAfterMin && `${it.proactive.reengageAfterMin}분 유휴 재참여`].filter(Boolean).join(", ")}.`,
-    );
+    const proactiveParts = [
+      it.proactive.followupSuggestions && s.prompt.step_interaction_proactive_followup,
+      it.proactive.reengageAfterMin &&
+        s.prompt.step_interaction_proactive_reengage(it.proactive.reengageAfterMin),
+    ]
+      .filter(Boolean)
+      .join(", ");
+    interactionExtra.push(s.prompt.step_interaction_proactive(proactiveParts));
   }
   if (it.inputLimits.maxChars || it.inputLimits.maxFileMb || it.inputLimits.allowedFileTypes?.length) {
-    interactionExtra.push(
-      `입력 제한: ${[it.inputLimits.maxChars && `${it.inputLimits.maxChars}자`, it.inputLimits.maxFileMb && `${it.inputLimits.maxFileMb}MB`, it.inputLimits.allowedFileTypes?.length && `형식 ${it.inputLimits.allowedFileTypes.join("/")}`].filter(Boolean).join(", ")}.`,
-    );
+    const inputParts = [
+      it.inputLimits.maxChars &&
+        (lang === "en" ? `${it.inputLimits.maxChars} chars` : `${it.inputLimits.maxChars}자`),
+      it.inputLimits.maxFileMb &&
+        `${it.inputLimits.maxFileMb}MB`,
+      it.inputLimits.allowedFileTypes?.length &&
+        (lang === "en"
+          ? `types: ${it.inputLimits.allowedFileTypes.join("/")}`
+          : `형식 ${it.inputLimits.allowedFileTypes.join("/")}`),
+    ]
+      .filter(Boolean)
+      .join(", ");
+    interactionExtra.push(s.prompt.step_interaction_input(inputParts));
   }
+
+  const controlsStr = it.controls.join(", ") || (lang === "en" ? "(none)" : "(없음)");
+  const feedbackStr = it.controls.includes("feedback") ? it.feedback : undefined;
   steps.push(
-    `${n++}. **상호작용/동작 방식 구현**: 동작 방식은 ${modeLabel}. ${interactionExtra.join(" ")} 대화 컨트롤: ${
-      it.controls.join(", ") || "(없음)"
-    }${it.controls.includes("feedback") ? ` (피드백 ${it.feedback})` : ""}.`,
+    `${n++}. ${s.prompt.step_interaction_prefix} ${modeLabel}. ${interactionExtra.join(" ")} ${s.prompt.step_interaction_controls(controlsStr, feedbackStr)}`,
   );
 
   // 에이전트 능력
   const ag = spec.agent;
   const caps: string[] = [];
-  if (ag.askUser) caps.push("정보 부족 시 사용자에게 명확화 질문(AskUser)");
+  if (ag.askUser) caps.push(s.prompt.step_agent_askuser);
   if (ag.subAgents.enabled)
     caps.push(
-      `서브에이전트${ag.subAgents.maxParallel ? `(최대 ${ag.subAgents.maxParallel} 병렬)` : ""}${
-        ag.subAgents.roles.length ? ` — 역할: ${ag.subAgents.roles.map((r) => r.name).join(", ")}` : ""
+      `${s.prompt.step_agent_subagent(ag.subAgents.maxParallel)}${
+        ag.subAgents.roles.length
+          ? s.prompt.step_agent_roles(ag.subAgents.roles.map((r) => r.name).join(", "))
+          : ""
       }`,
     );
-  if (ag.builtinTools.length) caps.push(`내장 도구: ${ag.builtinTools.join(", ")}`);
-  if (ag.memory.longTerm) caps.push("장기 기억(세션 간 벡터 기억)");
-  if (ag.context.autoCompact) caps.push(`컨텍스트 자동 압축(${ag.context.strategy}${ag.context.budgetTokens ? `, ${ag.context.budgetTokens} 토큰` : ""})`);
+  if (ag.builtinTools.length) caps.push(s.prompt.step_agent_builtin(ag.builtinTools.join(", ")));
+  if (ag.memory.longTerm) caps.push(s.prompt.step_agent_memory);
+  if (ag.context.autoCompact)
+    caps.push(s.prompt.step_agent_compact(ag.context.strategy, ag.context.budgetTokens));
   steps.push(
-    `${n++}. **에이전트 능력/안전 구현**: ${caps.length ? caps.join("; ") + ". " : ""}안전 — 거절 스타일 "${ag.safety.refusalStyle}"${ag.safety.rateLimitPerMin ? `, 분당 ${ag.safety.rateLimitPerMin}회 제한` : ""}${ag.safety.abuseFilter ? ", 남용 필터 적용" : ""}. (§7 가드레일과 함께 적용)`,
+    `${n++}. ${s.prompt.step_agent_prefix}: ${caps.length ? caps.join("; ") + ". " : ""}${s.prompt.step_agent_safety(ag.safety.refusalStyle, ag.safety.rateLimitPerMin, ag.safety.abuseFilter)}`,
   );
 
+  // 골든셋 검증
   steps.push(
-    `${n++}. **평가 골든셋 검증**: 동봉된 테스트 골격(\`tests/\`)을 실행해 \`evaluation\` 골든셋을 통과시킨다. 통과 못 하면 RAG/프롬프트를 조정한다.${
-      spec.evaluation.abTesting ? " 프롬프트/모델 변형 A/B 응답 비교를 구성한다." : ""
-    }`,
+    `${n++}. ${s.prompt.step_golden}${spec.evaluation.abTesting ? s.prompt.step_abtest : ""}`,
   );
-  steps.push(
-    `${n++}. **컴플라이언스 점검**: 접근성(${label(
-      "a11yLevel",
-      spec.frontend.a11yLevel,
-    )}), 개인정보 마스킹(${yesno(
-      spec.compliance.privacy.collectsPii && spec.compliance.privacy.masking,
-    )}), 감사 로그(${yesno(
-      spec.backend.logging.audit || spec.ops.audit,
-    )})를 최종 확인한다. 동봉된 감사 로그 미들웨어·마스킹 유틸 stub을 실제 정책에 맞게 채운다.`,
-  );
+
+  // 컴플라이언스 점검
+  if (lang === "en") {
+    steps.push(
+      `${n++}. ${s.prompt.step_compliance_prefix}: ${s.prompt.step_compliance_a11y} (${label("a11yLevel", spec.frontend.a11yLevel, lang)}), ${s.prompt.step_compliance_pii} (${yesno(spec.compliance.privacy.collectsPii && spec.compliance.privacy.masking, lang)}), ${s.prompt.step_compliance_audit} (${yesno(spec.backend.logging.audit || spec.ops.audit, lang)}) — ${s.prompt.step_compliance_footer}`,
+    );
+  } else {
+    steps.push(
+      `${n++}. **컴플라이언스 점검**: 접근성(${label("a11yLevel", spec.frontend.a11yLevel, lang)}), 개인정보 마스킹(${yesno(spec.compliance.privacy.collectsPii && spec.compliance.privacy.masking, lang)}), 감사 로그(${yesno(spec.backend.logging.audit || spec.ops.audit, lang)})를 최종 확인한다. 동봉된 감사 로그 미들웨어·마스킹 유틸 stub을 실제 정책에 맞게 채운다.`,
+    );
+  }
+
   const obs = spec.ops.observability;
   const perf = spec.ops.performance;
   const opsParts: string[] = [];
-  if (obs?.analytics && obs.analytics !== "none") opsParts.push(`사용 분석 도구 "${obs.analytics}" 연동`);
-  if (perf?.caching.length) opsParts.push(`캐시 계층 ${perf.caching.join("/")}${perf.promptCacheTtlSec ? ` (프롬프트 TTL ${perf.promptCacheTtlSec}s)` : ""}`);
+  if (obs?.analytics && obs.analytics !== "none")
+    opsParts.push(s.prompt.step_ops_analytics(obs.analytics));
+  if (perf?.caching.length)
+    opsParts.push(s.prompt.step_ops_cache(perf.caching.join("/"), perf.promptCacheTtlSec));
   if (opsParts.length) {
-    steps.push(`${n++}. **운영/관측 반영**: ${opsParts.join(", ")}.`);
+    steps.push(`${n++}. ${s.prompt.step_ops_prefix}: ${opsParts.join(", ")}.`);
   }
 
-  return `# 구현 지시 (Claude Code 마스터 프롬프트)
+  /* ---- 본문 조립 ---- */
+  const orgLabel = spec.project.org || (lang === "en" ? "(organization)" : "(기관)");
+  const nameLabel = spec.project.name || (lang === "en" ? "(chatbot)" : "(챗봇)");
 
-> 이 파일은 **Claude Code에게 주는 첫 지시**다. 이 폴더를 열고 아래를 순서대로 수행해
-> **${spec.project.org || "(기관)"}**의 챗봇 **"${spec.project.name || "(챗봇)"}"**을 완성하라.
+  return `# ${s.prompt.title}
 
-## 0. 가장 먼저 — 공공기관 제약 (위반 금지)
+> ${s.prompt.preamble(orgLabel, nameLabel)}
 
-${constraintLines(spec).join("\n")}
+## ${s.prompt.sec0}
 
-> 위 제약과 충돌하는 구현은 하지 않는다. 충돌이 보이면 멈추고 \`agent-spec.json\`을 기준으로 재확인한다.
+${constraintLines(spec, lang).join("\n")}
 
-## 1. 무엇을 만드는가
+${s.prompt.constraintFooter}
 
-- **기관/부서**: ${spec.project.org || "-"}${spec.project.dept ? ` / ${spec.project.dept}` : ""}
-- **챗봇 명칭**: ${spec.project.name || "-"}
-- **용도**: ${labelList("purpose", spec.project.purpose)}
-- **대상 사용자**: ${labelList("audience", spec.project.audience)}
-- **운영 언어**: ${labelList("languages", spec.project.languages)}
-- **스택**: ${label("framework", spec.frontend.framework)} (프론트) / ${label(
-    "runtime",
-    spec.backend.runtime,
-  )} (백엔드) / ${ragOn ? `RAG: ${label("vectorDb", spec.rag.vectorDb)} + ${spec.rag.embedding}` : "RAG 미사용"} / LLM: ${modelLabel(
-    spec.llm.model,
-  )}
+## ${s.prompt.sec1}
 
-## 2. 구현 순서 (이 순서를 지킨다 — 각 단계 끝에서 검증)
+- **${s.prompt.orgDept}**: ${spec.project.org || "-"}${spec.project.dept ? ` / ${spec.project.dept}` : ""}
+- **${s.prompt.botName}**: ${spec.project.name || "-"}
+- **${s.prompt.purpose}**: ${labelList("purpose", spec.project.purpose, undefined, lang)}
+- **${s.prompt.audience}**: ${labelList("audience", spec.project.audience, undefined, lang)}
+- **${s.prompt.opLang}**: ${labelList("languages", spec.project.languages, undefined, lang)}
+- **${s.prompt.stack}**: ${label("framework", spec.frontend.framework, lang)} (${lang === "en" ? "frontend" : "프론트"}) / ${label("runtime", spec.backend.runtime, lang)} (${lang === "en" ? "backend" : "백엔드"}) / ${ragOn ? `RAG: ${label("vectorDb", spec.rag.vectorDb, lang)} + ${spec.rag.embedding}` : s.prompt.ragOff} / LLM: ${modelLabel(spec.llm.model)}
+
+## ${s.prompt.sec2}
 
 ${steps.join("\n")}
 
-## 3. 완료 기준 (acceptance)
+## ${s.prompt.sec3}
 
-- [ ] 빌드 및 서버 기동 성공 (\`/health\` 200)
-- [ ] 디자인 토큰(컬러/폰트/위젯/레이아웃)이 UI에 반영됨
-${ragOn ? "- [ ] RAG 검색이 동작하고 답변에 출처가 표기됨\n" : ""}- [ ] \`evaluation\` 골든셋 테스트 통과
-- [ ] 접근성 ${label("a11yLevel", spec.frontend.a11yLevel)} / 개인정보·감사 로그 요건 충족
+- [ ] ${s.prompt.acc1}
+- [ ] ${s.prompt.acc2}
+${ragOn ? `- [ ] ${s.prompt.accRag}\n` : ""}- [ ] ${s.prompt.acc4}
+- [ ] ${s.prompt.acc3(label("a11yLevel", spec.frontend.a11yLevel, lang))}
 
-## 4. 원칙
+## ${s.prompt.sec4}
 
-- **\`agent-spec.json\`이 정본**이다. 모호하면 거기서 답을 찾는다. 그래도 없으면 보수적으로(공공기관 안전) 결정한다.
-- 선택되지 않은 기능은 임의로 추가하지 않는다(범위 고정 → 결정적 산출).
-- 한국어 사용자 기준으로 카피·오류 메시지·접근성 라벨을 작성한다.
+${s.prompt.principles}
 `;
 }
 
 /* ------------------------------ DESIGN.md ---------------------------------- */
 
 export function renderDesignMd(spec: AgentSpec): string {
+  const lang: Lang = spec.project.docLang === "en" ? "en" : "ko";
+  const s = t(lang);
   const tokens = designTokens(spec);
   const { widgetStyle } = spec.design;
-  return `# 디자인 시스템 (DESIGN.md)
+  const ds = s.design;
 
-> "${spec.project.name || "챗봇"}"의 시각 결정을 텍스트로 고정한 문서. UI 구현은 이 토큰을 따른다.
-> 색은 **직접 hex가 아니라 CSS 변수**로 사용한다.
+  return `# ${ds.title}
 
-## 테마
+> ${ds.preamble(spec.project.name || (lang === "en" ? "chatbot" : "챗봇"))}
 
-- **프리셋**: ${themeLabel(spec)}
-- **모드**: ${label("mode", spec.design.mode)}
-- **레이아웃**: ${label("layout", spec.design.layout)}
+## ${ds.sec_theme}
 
-## 컬러 토큰
+- **${ds.preset}**: ${themeLabel(spec)}
+- **${ds.mode}**: ${label("mode", spec.design.mode, lang)}
+- **${ds.layout}**: ${label("layout", spec.design.layout, lang)}
 
-| 토큰 | 값 | 용도 |
+## ${ds.sec_colors}
+
+| ${ds.col_token} | ${ds.col_value} | ${ds.col_usage} |
 |---|---|---|
-| \`--color-primary\` | \`${spec.design.colors.primary}\` | 주요 액션·강조 |
-| \`--color-secondary\` | \`${spec.design.colors.secondary}\` | 보조 |
-| \`--color-accent\` | \`${spec.design.colors.accent}\` | 포인트 |
-| \`--color-background\` | \`${spec.design.colors.background}\` | 배경 |
-| \`--color-surface\` | \`${spec.design.colors.surface}\` | 카드/말풍선 표면 |
-| \`--color-text\` | \`${spec.design.colors.text}\` | 본문 텍스트 |
-| \`--color-muted\` | \`${spec.design.colors.muted}\` | 보조 텍스트 |
-| \`--color-border\` | \`${spec.design.colors.border}\` | 경계선 |
+| \`--color-primary\` | \`${spec.design.colors.primary}\` | ${ds.colors.primary} |
+| \`--color-secondary\` | \`${spec.design.colors.secondary}\` | ${ds.colors.secondary} |
+| \`--color-accent\` | \`${spec.design.colors.accent}\` | ${ds.colors.accent} |
+| \`--color-background\` | \`${spec.design.colors.background}\` | ${ds.colors.background} |
+| \`--color-surface\` | \`${spec.design.colors.surface}\` | ${ds.colors.surface} |
+| \`--color-text\` | \`${spec.design.colors.text}\` | ${ds.colors.text} |
+| \`--color-muted\` | \`${spec.design.colors.muted}\` | ${ds.colors.muted} |
+| \`--color-border\` | \`${spec.design.colors.border}\` | ${ds.colors.border} |
 
-## 폰트
+## ${ds.sec_fonts}
 
-- **제목**: ${fontLabel(spec.design.fonts.heading)} (\`--font-heading\`)
-- **본문**: ${fontLabel(spec.design.fonts.body)} (\`--font-body\`)
+- **${ds.font_heading}**: ${fontLabel(spec.design.fonts.heading)} (\`--font-heading\`)
+- **${ds.font_body}**: ${fontLabel(spec.design.fonts.body)} (\`--font-body\`)
 
-## 챗 위젯 스타일
+## ${ds.sec_widget}
 
-- 말풍선 모서리: ${widgetStyle.bubbleRadius} (\`--bubble-radius\`)
-- 아바타 표시: ${yesno(widgetStyle.avatar)}
-- 봇 말풍선 정렬: ${widgetStyle.align}
-- 입력창 형태: ${widgetStyle.inputStyle}
-- 밀도: ${widgetStyle.density}
+- ${ds.widget_radius}: ${widgetStyle.bubbleRadius} (\`--bubble-radius\`)
+- ${ds.widget_avatar}: ${yesno(widgetStyle.avatar, lang)}
+- ${ds.widget_align}: ${widgetStyle.align}
+- ${ds.widget_input}: ${widgetStyle.inputStyle}
+- ${ds.widget_density}: ${widgetStyle.density}
 
-## CSS 변수 (그대로 복사해 사용)
+## ${ds.sec_css}
 
 \`\`\`css
 ${tokensToCss(tokens)}
 \`\`\`
 
-## 접근성 (KWCAG 2.2)
+## ${ds.sec_a11y}
 
-- 목표 등급: ${label("a11yLevel", spec.frontend.a11yLevel)}
-- 텍스트/배경 대비, 키보드 내비게이션, \`aria-*\` 라벨, 포커스 표시를 기본값으로 한다.
+- ${ds.a11y_goal}: ${label("a11yLevel", spec.frontend.a11yLevel, lang)}
+- ${ds.a11y_note}
 `;
 }
 
@@ -346,135 +405,132 @@ ${tokensToCss(tokens)}
 /* (생성될 챗봇 프로젝트용 작업 지침 — agent-maker 자신의 CLAUDE.md와 별개) */
 
 export function renderClaudeMd(spec: AgentSpec): string {
-  return `# CLAUDE.md — ${spec.project.name || "챗봇"} 작업 지침
+  const lang: Lang = spec.project.docLang === "en" ? "en" : "ko";
+  const s = t(lang);
+  const cs = s.claude;
+  const botName = spec.project.name || (lang === "en" ? "chatbot" : "챗봇");
 
-> 이 파일은 **이 챗봇 프로젝트에서 작업하는 Claude Code를 위한 지침**이다.
-> 구현 착수 지시는 \`PROMPT.md\`, 전체 설정 정본은 \`agent-spec.json\`을 본다.
+  return `# ${cs.title(botName)}
 
-## 1. 프로젝트 개요
+> ${cs.preamble}
 
-- 기관: ${spec.project.org || "-"} / 챗봇: ${spec.project.name || "-"}
-- 용도: ${labelList("purpose", spec.project.purpose)}
-- 배포 환경: ${label("deployEnv", spec.project.deployEnv)}
+## ${cs.sec1}
 
-## 2. 절대 규칙 (공공기관)
+- ${cs.org}: ${spec.project.org || "-"} / ${cs.bot}: ${spec.project.name || "-"}
+- ${cs.purpose}: ${labelList("purpose", spec.project.purpose, undefined, lang)}
+- ${cs.deploy}: ${label("deployEnv", spec.project.deployEnv, lang)}
 
-${constraintLines(spec).join("\n")}
+## ${cs.sec2}
 
-## 3. 스택
+${constraintLines(spec, lang).join("\n")}
 
-- 프론트엔드: ${label("framework", spec.frontend.framework)} / 임베드: ${label("embed", spec.frontend.embed)}
-- 백엔드: ${label("runtime", spec.backend.runtime)} / 인증: ${label("auth", spec.backend.auth)} / 배포: ${label(
-    "deploy",
-    spec.backend.deploy,
-  )}
-- DB: ${label("rdb", spec.database.rdb)} / 파일저장소: ${label("fileStore", spec.database.fileStore)}
-- LLM: ${label("provider", spec.llm.provider)} · ${modelLabel(spec.llm.model)} · ${label(
-    "serving",
-    spec.llm.serving,
-  )}
-${spec.rag.enabled ? `- RAG: ${label("vectorDb", spec.rag.vectorDb)} + 임베딩 ${spec.rag.embedding} + 검색 ${label("retrieval", spec.rag.retrieval.strategy)}` : "- RAG: 미사용"}
+## ${cs.sec3}
 
-## 4. 작업 원칙
+- ${cs.frontend}: ${label("framework", spec.frontend.framework, lang)} / ${cs.embed_label}: ${label("embed", spec.frontend.embed, lang)}
+- ${cs.backend}: ${label("runtime", spec.backend.runtime, lang)} / ${cs.auth_label}: ${label("auth", spec.backend.auth, lang)} / ${cs.deploy_label}: ${label("deploy", spec.backend.deploy, lang)}
+- ${cs.db_label}: ${label("rdb", spec.database.rdb, lang)} / ${cs.filestore_label}: ${label("fileStore", spec.database.fileStore, lang)}
+- ${cs.llm_label}: ${label("provider", spec.llm.provider, lang)} · ${modelLabel(spec.llm.model)} · ${label("serving", spec.llm.serving, lang)}
+${spec.rag.enabled ? `- ${cs.rag_line(label("vectorDb", spec.rag.vectorDb, lang), spec.rag.embedding, label("retrieval", spec.rag.retrieval.strategy, lang))}` : `- ${cs.rag_off}`}
 
-- \`agent-spec.json\`이 단일 진실. 설정과 코드가 어긋나면 spec을 따른다.
-- 답변은 ${label("tone", spec.conversation.persona.tone)} 톤. ${
-    spec.llm.guardrails.groundedOnly ? "근거 없는 내용은 답하지 않는다(환각 억제)." : ""
-  }${spec.rag.citations ? " 답변에 출처/페이지를 표기한다." : ""}
-- 모르는 질문은 "${label("onUnknown", spec.conversation.fallback.onUnknown)}"로 처리한다.
-- 모든 사용자 대면 텍스트는 한국어, 접근성(${label("a11yLevel", spec.frontend.a11yLevel)})을 지킨다.
+## ${cs.sec4}
 
-## 5. 검증
+- ${cs.principle_spec}
+- ${cs.principle_tone(label("tone", spec.conversation.persona.tone, lang))}${spec.llm.guardrails.groundedOnly ? cs.principle_grounded : ""}${spec.rag.citations ? cs.principle_cite : ""}
+- ${cs.principle_unknown(label("onUnknown", spec.conversation.fallback.onUnknown, lang))}
+- ${cs.principle_text(label("a11yLevel", spec.frontend.a11yLevel, lang))}
 
-- 빌드/기동(\`/health\`) 후 \`tests/\`의 평가 골든셋을 돌려 통과를 확인한다.
+## ${cs.sec5}
+
+- ${cs.verify}
 `;
 }
 
 /* --------------------------- ARCHITECTURE.md ------------------------------- */
 
 export function renderArchitectureMd(spec: AgentSpec): string {
+  const lang: Lang = spec.project.docLang === "en" ? "en" : "ko";
+  const s = t(lang);
+  const as = s.arch;
   const ragOn = spec.rag.enabled;
-  const ragFlow = ragOn
-    ? `\`\`\`
-[지식 소스: ${labelList("sources", spec.rag.sources, "(소스 미선택)")}]
-   │ 적재 (OCR ${yesno(spec.rag.ingest.ocr)} / 표 ${yesno(spec.rag.ingest.tables)})
-   ▼
-[청킹: ${label("chunking", spec.rag.chunking.strategy)}]
-   ▼
-[임베딩: ${spec.rag.embedding}] ──▶ [Vector DB: ${label("vectorDb", spec.rag.vectorDb)}]
-   ▼
-[검색: ${label("retrieval", spec.rag.retrieval.strategy)}${
-        spec.rag.retrieval.reranker ? ` + 리랭커 ${spec.rag.retrieval.reranker}` : ""
-      }]
-   ▼
-[LLM: ${modelLabel(spec.llm.model)}] ──▶ 답변${spec.rag.citations ? " (+출처 표기)" : ""}
-\`\`\``
-    : "_RAG 미사용 — LLM 단독 응답._";
 
-  return `# 아키텍처 (ARCHITECTURE.md)
+  let ragFlow: string;
+  if (ragOn) {
+    ragFlow = `\`\`\`
+[${as.rag_source}: ${labelList("sources", spec.rag.sources, lang === "en" ? "(none selected)" : "(소스 미선택)", lang)}]
+   │ ${as.rag_ingest(yesno(spec.rag.ingest.ocr, lang), yesno(spec.rag.ingest.tables, lang))}
+   ▼
+[${as.rag_chunk}: ${label("chunking", spec.rag.chunking.strategy, lang)}]
+   ▼
+[${as.rag_embed}: ${spec.rag.embedding}] ──▶ [${as.rag_vdb}: ${label("vectorDb", spec.rag.vectorDb, lang)}]
+   ▼
+[${as.rag_search}: ${label("retrieval", spec.rag.retrieval.strategy, lang)}${spec.rag.retrieval.reranker ? ` + ${as.rag_reranker} ${spec.rag.retrieval.reranker}` : ""}]
+   ▼
+[LLM: ${modelLabel(spec.llm.model)}] ──▶ ${as.rag_answer}${spec.rag.citations ? ` ${as.rag_cite}` : ""}
+\`\`\``;
+  } else {
+    ragFlow = as.rag_off;
+  }
 
-## 전체 구성
+  const embedServerNote =
+    ragOn && ["bge-m3", "kure", "ko-sroberta", "multilingual-e5"].includes(spec.rag.embedding)
+      ? `\n${as.rag_server_note(spec.rag.embedding)}\n`
+      : "";
 
-- **프론트엔드**: ${label("framework", spec.frontend.framework)} (${label("embed", spec.frontend.embed)})
-- **백엔드**: ${label("runtime", spec.backend.runtime)} / 인증 ${label("auth", spec.backend.auth)} / 네트워크 ${label(
-    "network",
-    spec.backend.network,
-  )}
-- **배포**: ${label("deploy", spec.backend.deploy)} (${label("deployEnv", spec.project.deployEnv)})
-- **데이터**: RDB ${label("rdb", spec.database.rdb)} / 파일 ${label("fileStore", spec.database.fileStore)}
+  return `# ${as.title}
 
-## RAG 파이프라인
+## ${as.sec1}
+
+- **${as.frontend_label}**: ${label("framework", spec.frontend.framework, lang)} (${label("embed", spec.frontend.embed, lang)})
+- **${as.backend_label}**: ${label("runtime", spec.backend.runtime, lang)} / ${as.auth_label} ${label("auth", spec.backend.auth, lang)} / ${as.network_label} ${label("network", spec.backend.network, lang)}
+- **${as.deploy_label}**: ${label("deploy", spec.backend.deploy, lang)} (${label("deployEnv", spec.project.deployEnv, lang)})
+- **${as.data_label}**: ${as.rdb_label} ${label("rdb", spec.database.rdb, lang)} / ${as.file_label} ${label("fileStore", spec.database.fileStore, lang)}
+
+## ${as.sec2}
 
 ${ragFlow}
-${
-    ragOn && ["bge-m3", "kure", "ko-sroberta", "multilingual-e5"].includes(spec.rag.embedding)
-      ? `\n> 임베딩 \`${spec.rag.embedding}\`은 클라우드 API가 아니라 **추론 서버**가 필요하다. 별도 컨테이너/서버로 띄우고 \`EMBEDDING_API_URL\`로 연결한다. 폐쇄망에서는 오프라인 설치 패키지에 모델 가중치를 포함한다.\n>\n> **API 계약(예시)**: \`POST {EMBEDDING_API_URL}/embed\` 요청 \`{ "text": "..." }\` → 응답 \`{ "embedding": number[] }\`. 예: \`text-embeddings-inference\`(HuggingFace) 또는 자체 FastAPI 래퍼. 미설정 시 \`src/rag/pipeline.ts\`는 샘플 코퍼스 폴백으로 동작한다.\n`
-      : ""
-}
+${embedServerNote}
 
-## 보안 · 컴플라이언스
+## ${as.sec3}
 
-- 데이터 국내 보관: ${yesno(spec.compliance.security.dataResidencyKR)}
-- 망분리 준수: ${yesno(spec.compliance.security.networkSeparation)}
-- 감사 로그: ${yesno(spec.backend.logging.audit)}
-- 접근성: ${label("a11yLevel", spec.frontend.a11yLevel)}
+- ${as.residency}: ${yesno(spec.compliance.security.dataResidencyKR, lang)}
+- ${as.network_sep}: ${yesno(spec.compliance.security.networkSeparation, lang)}
+- ${as.audit}: ${yesno(spec.backend.logging.audit, lang)}
+- ${as.a11y}: ${label("a11yLevel", spec.frontend.a11yLevel, lang)}
 
-## 운영
+## ${as.sec4}
 
-- 멀티턴 세션: ${yesno(spec.llm.session.multiTurn)}
-- 관리자 대시보드: ${yesno(spec.ops.observability?.adminDashboard)}
+- ${as.multiturn}: ${yesno(spec.llm.session.multiTurn, lang)}
+- ${as.dashboard}: ${yesno(spec.ops.observability?.adminDashboard, lang)}
 `;
 }
 
 /* ------------------------------ README.md ---------------------------------- */
 
 export function renderReadmeMd(spec: AgentSpec): string {
-  return `# ${spec.project.name || "공공기관 챗봇"}
+  const lang: Lang = spec.project.docLang === "en" ? "en" : "ko";
+  const s = t(lang);
+  const rs = s.readme;
 
-${spec.project.org || ""} ${spec.project.dept ?? ""} 챗봇 프로젝트.
+  return `# ${spec.project.name || rs.default_title}
 
-> 이 폴더는 **agent-maker**가 생성한 산출물이다. Claude Code로 구현을 시작하려면
-> 먼저 \`PROMPT.md\`를 읽게 하라.
+${rs.by(spec.project.org || "", spec.project.dept ?? "")}
 
-## 무엇인가
+${rs.preamble}
 
-- 용도: ${labelList("purpose", spec.project.purpose)}
-- 대상: ${labelList("audience", spec.project.audience)}
-- 배포 환경: ${label("deployEnv", spec.project.deployEnv)}
+## ${rs.sec1}
 
-## 구현 시작
+- ${rs.purpose}: ${labelList("purpose", spec.project.purpose, undefined, lang)}
+- ${rs.audience}: ${labelList("audience", spec.project.audience, undefined, lang)}
+- ${rs.deploy}: ${label("deployEnv", spec.project.deployEnv, lang)}
 
-1. 이 폴더에서 Claude Code를 연다.
-2. \`PROMPT.md\`의 지시를 따른다. (정본 설정: \`agent-spec.json\`)
-3. 빌드/기동 후 \`tests/\`의 평가 골든셋을 통과시킨다.
+## ${rs.sec2}
 
-## 포함 파일
+1. ${rs.step1}
+2. ${rs.step2}
+3. ${rs.step3}
 
-- \`PROMPT.md\` — Claude Code 구현 지시
-- \`DESIGN.md\` — 디자인 시스템(토큰)
-- \`ARCHITECTURE.md\` — 아키텍처
-- \`CLAUDE.md\` — 이 프로젝트 작업 지침
-- \`agent-spec.json\` — 전체 설정(정본)
-- 스캐폴딩 코드(\`src/\`, 매니페스트, \`tests/\` 등)
+## ${rs.sec3}
+
+${rs.files}
 `;
 }
