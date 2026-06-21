@@ -377,7 +377,8 @@ AgentSpec {
 - ✅ **(구현 완료)** 서브에이전트 역할 명세, 도구결과 캐싱(ops.caching tool-result), 핸드오프 SLA, A/B 응답 비교, 음성 STT/TTS 엔진, 이용 고지/동의·상태 메시지·접근성 사용자 컨트롤.
 - ✅ **시각 선택 감사(완료)**: 모든 단일선택 select를 `OptionCards`(미리보기 카드)로 전환. backend(런타임/프레임워크/인증/배포/망)·database(RDB/이력/캐시/파일)·frontend(프레임워크/임베드/KWCAG)·rag(청킹/임베딩/벡터DB/검색/리랭커)·llm(모델/호출)·conversation(톤·예시발화/폴백/핸드오프)·interaction(정책/속도/표시/길이/음성)·compliance(KWCAG). 단일선택 평문 드롭다운 0개.
 - ✅ **(구현 완료)** 프롬프트 캐시 TTL, 핸드오프 대기열 표시, 봇 아바타 스타일, 유휴 재참여·후속질문 추천, 입력 글자수/파일 제한, 다국어 UI·RTL, 분석 도구(GA/Matomo/자체), 배포 채널(웹/카카오/앱/Slack/Teams).
-- 📌 **백로그(잔여 후보)**: 봇 아바타 이미지 업로드 UI, 카카오 알림톡 템플릿 편집기, 세션 타임아웃 만료 동작 세분화, 채널별 메시지 포맷 변환. (대부분 산출물 PROMPT 지시로 위임 가능 — 마법사 선택지로서의 추가 가치는 한계에 근접)
+- ✅ **(추가 완료)** RAG 문서 접근 제어(role/부서), 이용자 본인확인(간편인증/공동인증/회원).
+- 🏁 **선택지 포화 판단(2026-06-21)**: 14개 섹션 전수 점검 결과, 에이전트 구축에 필요한 **distinct 선택지는 사실상 소진**. 남은 아이디어는 (a) 기존 옵션에 포함, (b) 마법사 선택이 아닌 산출물 PROMPT/런타임 구현 디테일(예: 아바타 이미지 업로드 UI, 카카오 알림톡 템플릿 편집기, SSE/WS 전송, 모델 failover, 감정 기반 에스컬레이션), (c) 기존 필드의 하위 변형 — 새 선택지로서의 추가 가치 없음. 이후로는 **선택지 추가가 아니라 산출물 품질(export-verify)·스캐폴드 깊이**가 다음 작업 축.
 - 📌 **백로그**: 스캐폴딩 깊이 — 현재 Node/TS 백엔드 스택 중심(다른 스택은 문서 + 기본 골격). 스택별 깊은 템플릿(Python/Java/Go 진입점·매니페스트)은 수요 기반 확장. 라이선스: 미정.
 - `npm audit` moderate 2건: Next.js 16이 내부적으로 쓰는 `postcss <8.5.10`(transitive) XSS 권고. `audit fix --force`는 Next를 9.x로 다운그레이드하므로 **적용하지 않음**. Next.js 상위 릴리스에서 해소될 때까지 보류/모니터링. (M6 재확인: 변동 없음, 보류 유지)
 - ✅ **`npm run lint` 정상화(M1)**: Next 16은 `next lint`를 제거했고 FlatCompat+`extends("next/...")`는 ESLint 9에서 circular JSON 오류를 냈다. → `eslint-config-next` **네이티브 flat config**(`/core-web-vitals` + `/typescript`)를 직접 import 하고 스크립트를 `eslint .`로 변경해 해결. `_` 접두사 미사용 변수는 허용 규칙 추가.
