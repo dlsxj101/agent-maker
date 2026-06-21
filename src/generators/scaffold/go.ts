@@ -471,7 +471,7 @@ function llmGo(spec: AgentSpec): string {
   // net/http 로 REST 직접 호출 (Anthropic / OpenAI 호환). 의존성 0.
   const imports = new Set<string>(["bytes", "encoding/json", "io", "net/http", "os"]);
   if (stream) imports.add("bufio");
-  if (stream || toolAgent) imports.add("strings");
+  if (stream) imports.add("strings"); // completeStream 의 SSE 파싱에만 사용
 
   const base = claude
     ? `const apiURL = "https://api.anthropic.com/v1/messages"
@@ -608,18 +608,140 @@ func completeStream(system string, messages []Msg, emit func(string)) {
 }`
     : "";
 
-  const toolFn = toolAgent
-    ? `
+  const toolFn = !toolAgent
+    ? ""
+    : claude
+      ? `
 
-// completeWithTools 는 tool-use 루프를 돈다(도구 실행→결과 회신→반복, 최대 maxSteps).
-// 골격은 단발 complete 로 위임한다 — 실제 provider tool-use(왕복)는 PROMPT.md 지시에 따라 채운다.
-func completeWithTools(system string, messages []Msg, defs []ToolDef, exec map[string]ToolFn, maxSteps int) string {
-	_ = defs
-	_ = exec
-	_ = maxSteps
-	return complete(system, messages)
+// completeWithTools 는 Claude tool-use 루프(stop_reason==tool_use → 도구 실행 → tool_result 회신 → 반복, 최대 maxSteps).
+func completeWithTools(system string, base []Msg, defs []ToolDef, exec map[string]ToolFn, maxSteps int) string {
+	var tools []map[string]any
+	for _, d := range defs {
+		var schema any
+		json.Unmarshal([]byte(d.InputSchema), &schema)
+		tools = append(tools, map[string]any{"name": d.Name, "description": d.Description, "input_schema": schema})
+	}
+	var messages []map[string]any
+	for _, m := range base {
+		messages = append(messages, map[string]any{"role": m.Role, "content": m.Content})
+	}
+	for step := 0; step < maxSteps; step++ {
+		payload := map[string]any{"model": model(), "max_tokens": ${maxTokens}, "temperature": ${temperature}, "system": system, "tools": tools, "messages": messages}
+		body, _ := json.Marshal(payload)
+		req, _ := http.NewRequest("POST", apiURL, bytes.NewReader(body))
+		authHeaders(req)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return ""
+		}
+		raw, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		var parsed struct {
+			StopReason string \`json:"stop_reason"\`
+			Content    []struct {
+				Type  string         \`json:"type"\`
+				Text  string         \`json:"text"\`
+				ID    string         \`json:"id"\`
+				Name  string         \`json:"name"\`
+				Input map[string]any \`json:"input"\`
+			} \`json:"content"\`
+		}
+		json.Unmarshal(raw, &parsed)
+		if parsed.StopReason == "tool_use" {
+			var rawMsg struct {
+				Content []map[string]any \`json:"content"\`
+			}
+			json.Unmarshal(raw, &rawMsg)
+			messages = append(messages, map[string]any{"role": "assistant", "content": rawMsg.Content})
+			var results []map[string]any
+			for _, b := range parsed.Content {
+				if b.Type == "tool_use" {
+					var out any = map[string]any{"error": "unknown tool"}
+					if fn, ok := exec[b.Name]; ok {
+						out = fn(b.Input)
+					}
+					outB, _ := json.Marshal(out)
+					results = append(results, map[string]any{"type": "tool_result", "tool_use_id": b.ID, "content": string(outB)})
+				}
+			}
+			messages = append(messages, map[string]any{"role": "user", "content": results})
+			continue
+		}
+		for _, b := range parsed.Content {
+			if b.Type == "text" {
+				return b.Text
+			}
+		}
+		return ""
+	}
+	return "(최대 도구 호출 횟수를 초과했습니다.)"
 }`
-    : "";
+      : `
+
+// completeWithTools 는 OpenAI 호환 function-calling 루프(tool_calls → 도구 실행 → role:tool 회신 → 반복, 최대 maxSteps).
+func completeWithTools(system string, base []Msg, defs []ToolDef, exec map[string]ToolFn, maxSteps int) string {
+	var oaiTools []map[string]any
+	for _, d := range defs {
+		var schema any
+		json.Unmarshal([]byte(d.InputSchema), &schema)
+		oaiTools = append(oaiTools, map[string]any{"type": "function", "function": map[string]any{"name": d.Name, "description": d.Description, "parameters": schema}})
+	}
+	messages := []map[string]any{{"role": "system", "content": system}}
+	for _, m := range base {
+		messages = append(messages, map[string]any{"role": m.Role, "content": m.Content})
+	}
+	for step := 0; step < maxSteps; step++ {
+		payload := map[string]any{"model": model(), "max_tokens": ${maxTokens}, "temperature": ${temperature}, "messages": messages, "tools": oaiTools}
+		body, _ := json.Marshal(payload)
+		res, err := http.Post(baseURL+"/chat/completions", "application/json", bytes.NewReader(body))
+		if err != nil {
+			return ""
+		}
+		raw, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		var parsed struct {
+			Choices []struct {
+				Message struct {
+					Content   string \`json:"content"\`
+					ToolCalls []struct {
+						ID       string \`json:"id"\`
+						Function struct {
+							Name      string \`json:"name"\`
+							Arguments string \`json:"arguments"\`
+						} \`json:"function"\`
+					} \`json:"tool_calls"\`
+				} \`json:"message"\`
+			} \`json:"choices"\`
+		}
+		json.Unmarshal(raw, &parsed)
+		if len(parsed.Choices) == 0 {
+			return ""
+		}
+		msg := parsed.Choices[0].Message
+		if len(msg.ToolCalls) > 0 {
+			var rawMsg struct {
+				Choices []struct {
+					Message map[string]any \`json:"message"\`
+				} \`json:"choices"\`
+			}
+			json.Unmarshal(raw, &rawMsg)
+			messages = append(messages, rawMsg.Choices[0].Message)
+			for _, call := range msg.ToolCalls {
+				var args map[string]any
+				json.Unmarshal([]byte(call.Function.Arguments), &args)
+				var out any = map[string]any{"error": "unknown tool"}
+				if fn, ok := exec[call.Function.Name]; ok {
+					out = fn(args)
+				}
+				outB, _ := json.Marshal(out)
+				messages = append(messages, map[string]any{"role": "tool", "tool_call_id": call.ID, "content": string(outB)})
+			}
+			continue
+		}
+		return msg.Content
+	}
+	return "(최대 도구 호출 횟수를 초과했습니다.)"
+}`;
 
   const importBlock = Array.from(imports)
     .sort()

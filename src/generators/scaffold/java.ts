@@ -377,27 +377,159 @@ function llmClientJava(spec: AgentSpec): string {
   const { maxTokens, temperature } = spec.llm.params;
   const claude = spec.llm.provider === "claude" && spec.llm.serving === "official-api";
 
-  const streamMethod = stream
+  // 스트리밍/도구 루프는 provider(claude/openai)별 요청·파싱이 달라 분기 생성한다.
+  const claudeHeaders = `.header("content-type", "application/json")
+                .header("x-api-key", System.getenv().getOrDefault("ANTHROPIC_API_KEY", ""))
+                .header("anthropic-version", "2023-06-01")`;
+
+  const claudeStream = stream
     ? `
 
     public void completeStream(String system, List<ChatService.Msg> messages, java.util.function.Consumer<String> emit) {
-        // 스트리밍 골격 — 실제 SSE 파싱은 PROMPT.md 지시에 따라 구현. 골격은 단발 호출을 한 번에 흘린다.
-        emit.accept(complete(system, messages));
+        try {
+            List<Map<String, String>> msgs = new ArrayList<>();
+            for (ChatService.Msg m : messages) msgs.add(Map.of("role", m.role(), "content", m.content()));
+            String body = mapper.writeValueAsString(Map.of(
+                "model", MODEL, "max_tokens", ${maxTokens}, "temperature", ${temperature},
+                "system", system, "messages", msgs, "stream", true));
+            HttpRequest req = HttpRequest.newBuilder(URI.create(API_URL))
+                ${claudeHeaders}
+                .POST(HttpRequest.BodyPublishers.ofString(body)).build();
+            HttpResponse<java.util.stream.Stream<String>> res = http.send(req, HttpResponse.BodyHandlers.ofLines());
+            res.body().forEach(line -> {
+                String t = line.trim();
+                if (!t.startsWith("data:")) return;
+                try {
+                    JsonNode ev = mapper.readTree(t.substring(5).trim());
+                    if ("content_block_delta".equals(ev.path("type").asText())
+                            && "text_delta".equals(ev.path("delta").path("type").asText())) {
+                        emit.accept(ev.path("delta").path("text").asText());
+                    }
+                } catch (Exception ignored) {}
+            });
+        } catch (Exception ignored) {}
     }`
     : "";
-  const toolMethod = toolAgent
+  const claudeTool = toolAgent
     ? `
 
     public String completeWithTools(String system, List<ChatService.Msg> messages, List<Map<String, Object>> defs,
                                      Map<String, Tools.ToolFn> exec, int maxSteps) {
-        // tool-use 루프 골격 — provider tool-use 왕복은 PROMPT.md 지시로 채운다. 골격은 단발 complete 위임.
-        return complete(system, messages);
+        try {
+            List<Map<String, Object>> tools = new ArrayList<>();
+            for (Map<String, Object> d : defs)
+                tools.add(Map.of("name", d.get("name"), "description", d.get("description"),
+                    "input_schema", mapper.readTree((String) d.get("input_schema"))));
+            List<Object> msgs = new ArrayList<>();
+            for (ChatService.Msg m : messages) msgs.add(Map.of("role", m.role(), "content", m.content()));
+            for (int step = 0; step < maxSteps; step++) {
+                String body = mapper.writeValueAsString(Map.of(
+                    "model", MODEL, "max_tokens", ${maxTokens}, "temperature", ${temperature},
+                    "system", system, "tools", tools, "messages", msgs));
+                HttpRequest req = HttpRequest.newBuilder(URI.create(API_URL))
+                    ${claudeHeaders}
+                    .POST(HttpRequest.BodyPublishers.ofString(body)).build();
+                JsonNode root = mapper.readTree(http.send(req, HttpResponse.BodyHandlers.ofString()).body());
+                if ("tool_use".equals(root.path("stop_reason").asText())) {
+                    JsonNode content = root.path("content");
+                    msgs.add(Map.of("role", "assistant", "content", content));
+                    List<Object> results = new ArrayList<>();
+                    for (JsonNode b : content) {
+                        if ("tool_use".equals(b.path("type").asText())) {
+                            Tools.ToolFn fn = exec.get(b.path("name").asText());
+                            Map<String, Object> input = mapper.convertValue(b.path("input"), Map.class);
+                            Object out = fn != null ? fn.apply(input) : Map.of("error", "unknown tool");
+                            results.add(Map.of("type", "tool_result", "tool_use_id", b.path("id").asText(),
+                                "content", mapper.writeValueAsString(out)));
+                        }
+                    }
+                    msgs.add(Map.of("role", "user", "content", results));
+                    continue;
+                }
+                for (JsonNode b : root.path("content"))
+                    if ("text".equals(b.path("type").asText())) return b.path("text").asText();
+                return "";
+            }
+        } catch (Exception ignored) {}
+        return "(최대 도구 호출 횟수를 초과했습니다.)";
     }`
     : "";
+
+  const openaiStream = stream
+    ? `
+
+    public void completeStream(String system, List<ChatService.Msg> messages, java.util.function.Consumer<String> emit) {
+        try {
+            List<Map<String, String>> msgs = new ArrayList<>();
+            msgs.add(Map.of("role", "system", "content", system));
+            for (ChatService.Msg m : messages) msgs.add(Map.of("role", m.role(), "content", m.content()));
+            String body = mapper.writeValueAsString(Map.of("model", MODEL, "messages", msgs, "stream", true));
+            HttpRequest req = HttpRequest.newBuilder(URI.create(BASE_URL + "/chat/completions"))
+                .header("content-type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body)).build();
+            HttpResponse<java.util.stream.Stream<String>> res = http.send(req, HttpResponse.BodyHandlers.ofLines());
+            res.body().forEach(line -> {
+                String t = line.trim();
+                if (!t.startsWith("data:")) return;
+                String payload = t.substring(5).trim();
+                if ("[DONE]".equals(payload)) return;
+                try {
+                    JsonNode c = mapper.readTree(payload).path("choices").path(0).path("delta").path("content");
+                    if (!c.isMissingNode() && !c.asText().isEmpty()) emit.accept(c.asText());
+                } catch (Exception ignored) {}
+            });
+        } catch (Exception ignored) {}
+    }`
+    : "";
+  const openaiTool = toolAgent
+    ? `
+
+    public String completeWithTools(String system, List<ChatService.Msg> messages, List<Map<String, Object>> defs,
+                                     Map<String, Tools.ToolFn> exec, int maxSteps) {
+        try {
+            List<Map<String, Object>> tools = new ArrayList<>();
+            for (Map<String, Object> d : defs)
+                tools.add(Map.of("type", "function", "function", Map.of(
+                    "name", d.get("name"), "description", d.get("description"),
+                    "parameters", mapper.readTree((String) d.get("input_schema")))));
+            List<Object> msgs = new ArrayList<>();
+            msgs.add(Map.of("role", "system", "content", system));
+            for (ChatService.Msg m : messages) msgs.add(Map.of("role", m.role(), "content", m.content()));
+            for (int step = 0; step < maxSteps; step++) {
+                String body = mapper.writeValueAsString(Map.of("model", MODEL, "messages", msgs, "tools", tools));
+                HttpRequest req = HttpRequest.newBuilder(URI.create(BASE_URL + "/chat/completions"))
+                    .header("content-type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body)).build();
+                JsonNode root = mapper.readTree(http.send(req, HttpResponse.BodyHandlers.ofString()).body());
+                JsonNode msg = root.path("choices").path(0).path("message");
+                JsonNode calls = msg.path("tool_calls");
+                if (calls.isArray() && calls.size() > 0) {
+                    msgs.add(mapper.convertValue(msg, Map.class));
+                    for (JsonNode call : calls) {
+                        Tools.ToolFn fn = exec.get(call.path("function").path("name").asText());
+                        Map<String, Object> args;
+                        try { args = mapper.readValue(call.path("function").path("arguments").asText("{}"), Map.class); }
+                        catch (Exception e) { args = Map.of(); }
+                        Object out = fn != null ? fn.apply(args) : Map.of("error", "unknown tool");
+                        msgs.add(Map.of("role", "tool", "tool_call_id", call.path("id").asText(),
+                            "content", mapper.writeValueAsString(out)));
+                    }
+                    continue;
+                }
+                return msg.path("content").asText("");
+            }
+        } catch (Exception ignored) {}
+        return "(최대 도구 호출 횟수를 초과했습니다.)";
+    }`
+    : "";
+
+  const streamMethod = claude ? claudeStream : openaiStream;
+  const toolMethod = claude ? claudeTool : openaiTool;
 
   if (claude) {
     return `package ${PKG};
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -442,6 +574,7 @@ public class LlmClient {
   }
   return `package ${PKG};
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.net.http.HttpClient;
