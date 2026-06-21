@@ -480,19 +480,51 @@ function ragPipelineTs(spec: AgentSpec): string {
 
 export interface Chunk { id: string; text: string; source: string; page?: number; }
 
-/** 1) 문서 적재 (소스: ${spec.rag.sources.join(", ") || "미선택"}) */
-export async function ingest(_filePath: string): Promise<string> {
-  throw new Error("TODO: 문서 적재 구현");
+const CHUNK_SIZE = ${spec.rag.chunking.size ?? 800};
+const CHUNK_OVERLAP = ${spec.rag.chunking.overlap ?? 100};
+
+/** 1) 문서 적재 (소스: ${spec.rag.sources.join(", ") || "미선택"}) — 텍스트/마크다운은 그대로 읽는다.
+ *  PDF/HWP 등 바이너리는 변환 후(예: libreoffice→txt) 텍스트를 넘긴다. */
+export async function ingest(filePath: string): Promise<string> {
+  const { readFile } = await import("node:fs/promises");
+  if (/\\.(pdf|hwp|docx)$/i.test(filePath)) {
+    throw new Error("바이너리 문서는 텍스트로 변환 후 chunk()/index() 에 넘기세요 (예: libreoffice --convert-to txt).");
+  }
+  return readFile(filePath, "utf-8");
 }
 
-/** 2) 청킹 (전략: ${spec.rag.chunking.strategy}) */
-export function chunk(_text: string): Chunk[] {
-  throw new Error("TODO: 청킹 구현");
+/** 2) 청킹 (전략: ${spec.rag.chunking.strategy}) — 문단 묶음 + 크기 상한 + 오버랩. */
+export function chunk(text: string, source = "uploaded"): Chunk[] {
+  const paras = text.split(/\\n\\s*\\n/).map((p) => p.trim()).filter(Boolean);
+  const out: Chunk[] = [];
+  let buf = "";
+  const flush = () => {
+    if (!buf) return;
+    out.push({ id: source + "#" + out.length, text: buf, source });
+    buf = buf.slice(Math.max(0, buf.length - CHUNK_OVERLAP)); // 오버랩 유지
+  };
+  for (const p of paras) {
+    if ((buf + "\\n\\n" + p).length > CHUNK_SIZE && buf) flush();
+    buf = buf ? buf + "\\n\\n" + p : p;
+    while (buf.length > CHUNK_SIZE) {
+      out.push({ id: source + "#" + out.length, text: buf.slice(0, CHUNK_SIZE), source });
+      buf = buf.slice(CHUNK_SIZE - CHUNK_OVERLAP);
+    }
+  }
+  if (buf) out.push({ id: source + "#" + out.length, text: buf, source });
+  return out;
 }
 
-/** 3) 임베딩 + Vector DB 적재 */
-export async function index(_chunks: Chunk[]): Promise<void> {
-  throw new Error("TODO: 임베딩/적재 구현");
+// 개발용 인메모리 색인 (운영은 ${spec.rag.vectorDb}). index() 로 적재되고 search() 가 함께 조회한다.
+const INDEXED: Chunk[] = [];
+
+/** 3) 임베딩 + Vector DB 적재 — 개발: 인메모리. 운영: ${spec.rag.embedding} 임베딩 후 ${spec.rag.vectorDb} upsert(TODO). */
+export async function index(chunks: Chunk[]): Promise<void> {
+  if (process.env.EMBEDDING_API_URL && process.env.DATABASE_URL) {
+    // TODO: 각 청크를 ${spec.rag.embedding} 로 임베딩 → ${spec.rag.vectorDb} 에 upsert
+    console.warn("[rag] 실제 임베딩/적재 미구현 — 인메모리 색인에 보관합니다.");
+  }
+  INDEXED.push(...chunks);
 }
 
 // 개발/CI용 샘플 코퍼스(골든셋 파생). 실제 적재 구현 시 ${spec.rag.vectorDb} 검색으로 대체한다.
@@ -512,7 +544,8 @@ export async function search(query: string, topK = ${spec.rag.retrieval.topK ?? 
     console.warn("[rag] 실제 벡터 검색 미구현 — 샘플 코퍼스로 폴백합니다.");
   }
   const terms = query.toLowerCase().split(/\\s+/).filter(Boolean);
-  const scored = DEV_CORPUS.map((c) => ({
+  const pool = [...INDEXED, ...DEV_CORPUS]; // 적재분 우선 + 골든셋 폴백
+  const scored = pool.map((c) => ({
     c,
     score: terms.reduce((s, t) => s + (c.text.toLowerCase().includes(t) ? 1 : 0), 0),
   }));

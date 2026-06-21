@@ -48,6 +48,14 @@ describe("generateArtifacts — 파일 구성", () => {
     expect(paths).toEqual([...paths].sort((a, b) => a.localeCompare(b)));
   });
 
+  it("RAG pipeline 의 ingest/chunk/index 가 throw 스텁이 아니라 실제 구현이다", () => {
+    const p = fileMap(generateArtifacts(cloudSpec, { now: FIXED_NOW }))["src/rag/pipeline.ts"];
+    expect(p).toContain("readFile"); // ingest 가 파일을 실제로 읽는다
+    expect(p).toContain("CHUNK_SIZE"); // chunk 가 크기 기반 분할
+    expect(p).toContain("INDEXED"); // index 가 인메모리 색인에 적재
+    expect(p).not.toContain('throw new Error("TODO: 청킹');
+  });
+
   it("RAG 비활성 시 pipeline.ts 를 생성하지 않는다", () => {
     const noRag = { ...cloudSpec, rag: { ...cloudSpec.rag, enabled: false } };
     const paths = generateArtifacts(noRag, { now: FIXED_NOW }).map((f) => f.path);
