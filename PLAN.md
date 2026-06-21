@@ -298,6 +298,18 @@ AgentSpec {
 > 3. **§9 라이브러리 결정은 해당 마일스톤의 "0번 작업(spike)"** 으로 못 박는다(미결정인 채 진입 금지).
 > 4. 단방향 데이터 흐름(스키마→타입→UI→생성기, CLAUDE.md §4.2)은 유지하되, 영역을 좁혀 끝까지 관통한다.
 
+> **📸 진행 상태 스냅샷 / 회고 (2026-06-21)**
+>
+> **마법사(입력)**: 14단계 / `AgentSpec` 14섹션 완비. 모든 단일선택은 **시각 카드(미리보기)** 로 전환 완료(평문 드롭다운 0). 교차검증 규칙 **C1~C19**(conflicts.ts 19 ↔ spec-schema 표 19 동기화). 에이전트 구축 선택지는 사실상 **포화**(동작방식·도구·스트리밍·렌더링·출력·메모리·컨텍스트·안전·멀티모달·음성·채널·접근제어·본인확인·고지/동의·접근성 등).
+>
+> **산출물(생성기)**: 문서(PROMPT/DESIGN/ARCHITECTURE/CLAUDE/README) + 설정 + 프론트 + 백엔드 + 테스트 풀세트. 스캐폴드 깊이: 멀티턴 세션·SSE 스트리밍·**실 tool-use 루프(completeWithTools)**·TOOL_DEFS·confirm 라우트·trace SSE·안전 미들웨어(rate/abuse/길이)·가드레일 시스템프롬프트 주입·**RAG ingest/chunk/index/search 실동작**·출처 칩 UI. throw 스텁 거의 제거.
+>
+> **검증(게이트)**: 대표 4프로필(cloud/airgap/toolagent/voice). 합격 기준 4/4(빌드·기동·골든셋·결정성) + 런타임 스모크(SSE 토큰/trace, 도구호출, confirm 200/400, 입력가드 400) + 생성물 `tsc`(실 @anthropic-ai/sdk 타입). 구현 에이전트 1-shot(cloud·toolagent) "mostly" 통과. 게이트가 실제로 잡은 버그 3건 수정(세션 리터럴 타입·RAG 빈검색·SDK ContentBlockParam).
+>
+> **검증 경계(정직)**: 실 LLM 호출/임베딩 검색/실 tool-use **런타임은 API 키·실문서·벡터DB가 없어 미검증** — `tsc`(타입)·`LLM_STUB`(플러밍)·런타임 스모크까지가 이 환경의 신뢰 한계. 키 제공 시 실 E2E 가 다음 단계.
+>
+> **다음 후보(저우선/이연)**: 음성 엔진 카탈로그화, OpenAI호환 function-calling 루프, 산출물 다국어, 스택별 깊은 템플릿(Python/Java/Go).
+
 - **M0 — 프로젝트 세팅** ✅ *(완료)*
   - 저장소 초기화, 계획/지침 문서(PLAN/CLAUDE/README/spec-schema), .gitignore/.gitattributes
   - Next.js 골격, `AgentSpec`·생성기·카탈로그 자리표시자, 초기 커밋/푸시
