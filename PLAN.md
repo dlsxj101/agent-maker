@@ -391,6 +391,14 @@ AgentSpec {
   - **검증**: 각 스택 산출물의 정적 검증(컴파일/타입체크)·`/health`·골든셋 스모크. 골든 스냅샷 갱신. 단위 테스트 확장.
   - ⏭️ **마법사 UI 라벨 다국어화**(산출물이 아닌 마법사 자체)는 수요 기반 후속.
 
+  **M7 진행 로그 (2026-06-21):**
+  - ✅ **M7-B 음성 카탈로그**: `src/catalog/voice.ts`(STT/TTS 라벨·설명·배포위치). UI·충돌(C16, `CLOUD_VOICE_ENGINES` 파생)·문서(format/docs)가 데이터 참조. (커밋됨)
+  - ✅ **M7-0 디스패처 리팩터**: `scaffold.ts` → `scaffold/{index,shared,node,python,java,go}.ts`. 프론트엔드(채팅 위젯)는 공통, 백엔드는 `backend.runtime` 분기. **Node 출력 바이트 동일**(스냅샷 무변동, 60 테스트 통과).
+  - ✅ **M7-A OpenAI function-calling 루프**: Node `llm/client.ts` 의 OpenAI 호환 `completeWithTools` TODO 스텁 → 실제 `tools`(type:function)·`tool_calls`·`role:tool` 왕복 루프로 구현(Python 도 동등 구현). 생성물 `tsc` 클린 + 골든 통과.
+  - ✅ **M7-D 스택 풀 패리티 + 검증**: Python(FastAPI)·Go(net/http, 의존성0)·Java(Spring Boot). 동일 REST 계약/멀티턴/RAG/가드/안전/PII/스트리밍. **실 검증 통과**: Python `py_compile`(×3 프로필)·Go `build+vet+test`(×3)·Java `mvn compile`+JUnit(×3)·Node-compat `tsc`+golden. 단위 테스트(스택 디스패치) 추가.
+  - 📌 **현재 깊이 갭(정직)**: full = Node/Python(서버·chat·rag·스트리밍·tool-use 풀). 부분 = **Java 스트리밍·Go/Java tool-use 루프는 단발 complete 위임 골격**(server/chat/rag/guards/masking/multiturn 은 풀). Go 스트리밍은 풀(실 SSE 파싱). → 차기에 Go/Java tool-use·Java 스트리밍 심화.
+  - 🚧 **M7-C 산출물 다국어(docLang)**: 다음 작업.
+
 > **검증 루프 요약** (제품의 본질이므로 로드맵에 명시):
 > - 자동: 골든 산출물 스냅샷 테스트 · `AgentSpec` round-trip · 충돌 규칙 단위 테스트
 > - 반자동(게이트): 생성된 ZIP → 실제 Claude Code 실행 → 빌드/기동 + 골든셋 통과. **M2에서 1회, M6에서 전 범위 재검증.**

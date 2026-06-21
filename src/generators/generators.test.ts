@@ -15,6 +15,7 @@ import {
 } from "./index";
 import { cloudSpec, airgapSpec, toolAgentSpec, voiceSpec, FIXED_NOW } from "./fixtures";
 import { detectConflicts } from "@/lib/conflicts";
+import { createDraftSpec, type AgentSpec } from "@/lib/agent-spec";
 
 function fileMap(files: GeneratedFile[]): Record<string, string> {
   return Object.fromEntries(files.map((f) => [f.path, f.contents]));
@@ -105,6 +106,57 @@ describe("generateArtifacts — 파일 구성", () => {
     expect(m["src/chat.ts"]).toContain("answerStream");
     expect(m["src/server.ts"]).toContain("/api/chat/stream");
     expect(m["src/llm/client.ts"]).toContain("completeStream");
+  });
+});
+
+describe("스택별 디스패치 (M7-D 풀 패리티)", () => {
+  const withRuntime = (runtime: AgentSpec["backend"]["runtime"]): AgentSpec => ({
+    ...toolAgentSpec,
+    backend: { ...toolAgentSpec.backend, runtime },
+  });
+
+  it("python → FastAPI 백엔드(main.py/requirements/chat/llm/rag/tools)를 생성한다", () => {
+    const m = fileMap(generateArtifacts(withRuntime("python"), { now: FIXED_NOW }));
+    for (const p of ["main.py", "chat.py", "llm_client.py", "requirements.txt", "rag/pipeline.py", "tools.py"])
+      expect(Object.keys(m)).toContain(p);
+    expect(m["main.py"]).toContain("FastAPI");
+    expect(m["main.py"]).toContain("/api/chat/confirm"); // toolPolicy=confirm
+    expect(Object.keys(m)).not.toContain("package.json"); // Node 산출물 아님
+  });
+
+  it("go → net/http 백엔드(main.go/llm.go/go.mod)를 생성한다", () => {
+    const m = fileMap(generateArtifacts(withRuntime("go"), { now: FIXED_NOW }));
+    for (const p of ["main.go", "llm.go", "go.mod", "main_test.go"]) expect(Object.keys(m)).toContain(p);
+    expect(m["main.go"]).toContain("net/http");
+    expect(m["main.go"]).toContain("toolDefs"); // tool-agent
+  });
+
+  it("java → Spring Boot 백엔드(pom.xml/Controller/Service)를 생성한다", () => {
+    const m = fileMap(generateArtifacts(withRuntime("java"), { now: FIXED_NOW }));
+    expect(Object.keys(m)).toContain("pom.xml");
+    expect(Object.keys(m).some((p) => p.endsWith("ChatController.java"))).toBe(true);
+    expect(Object.keys(m).some((p) => p.endsWith("ChatService.java"))).toBe(true);
+    expect(Object.keys(m).some((p) => p.endsWith("Tools.java"))).toBe(true);
+  });
+
+  it("모든 스택이 공통 프론트엔드(public/*)를 공유한다", () => {
+    for (const rt of ["node", "python", "go", "java"] as const) {
+      const m = fileMap(generateArtifacts(withRuntime(rt), { now: FIXED_NOW }));
+      expect(Object.keys(m)).toContain("public/index.html");
+      expect(Object.keys(m)).toContain("public/styles.css");
+    }
+  });
+
+  it("M7-A: OpenAI 호환 + tool-agent → function-calling 루프(tool_calls)를 생성한다", () => {
+    const spec = createDraftSpec({
+      llm: { provider: "opensource", serving: "self-hosted" },
+      interaction: { agentMode: "tool-agent" },
+      integrations: { tools: [{ name: "t", description: "d" }] },
+    });
+    const client = fileMap(generateArtifacts(spec, { now: FIXED_NOW }))["src/llm/client.ts"];
+    expect(client).toContain("tool_calls"); // OpenAI function-calling 응답 처리
+    expect(client).toContain('type: "function" as const'); // tools 변환
+    expect(client).not.toContain("임시: 단순 complete"); // 기존 TODO 스텁이 사라졌는지
   });
 });
 

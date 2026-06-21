@@ -1,43 +1,13 @@
 /**
- * 스캐폴딩 코드 생성 — AgentSpec → 최소 실행 가능한 골격 파일들. (PLAN.md §6.2)
+ * Node.js / TypeScript 백엔드 스캐폴드 (참조 구현). (M7-0 에서 scaffold.ts 에서 추출)
  *
- * 목표: "빈 껍데기"가 아니라 **컴파일/기동되는 최소 골격**. 비즈니스 로직은 Claude Code가
- * PROMPT.md 지시에 따라 채운다. M2 슬라이스는 기본 스택(Node + TypeScript 백엔드 + 토큰 적용
- * 채팅 UI)을 대상으로 한다. 다른 스택의 깊은 템플릿은 M5/M6에서 확장한다. (PLAN.md §9)
+ * Express + tsx/tsc 기반. 멀티턴 세션·SSE 스트리밍·tool-use 루프·RAG 골격·가드/안전
+ * 미들웨어를 spec 플래그에 따라 생성한다. 다른 스택(python/java/go)은 이 깊이를 기준으로 맞춘다.
  */
 
 import type { AgentSpec } from "@/lib/agent-spec";
-import type { GeneratedFile } from "./index";
-import { designTokens, tokensToCss } from "./tokens";
-
-/** 선택에 따라 필요한 환경변수 목록(placeholder)을 계산 */
-/** API 키 없이 추론 서버가 필요한 온프레미스 임베딩 모델 */
-const ONPREM_EMBEDDINGS = ["bge-m3", "kure", "ko-sroberta", "multilingual-e5"];
-
-function envEntries(spec: AgentSpec): string[] {
-  const env: string[] = ["# 자동 생성된 환경변수 목록 — 실제 값으로 채운다", "PORT=3000"];
-  env.push("# 테스트/오프라인: true 면 LLM 호출 없이 스텁 응답 사용");
-  env.push("LLM_STUB=false");
-  if (spec.llm.serving === "self-hosted" || spec.llm.serving === "proxy") {
-    env.push("LLM_BASE_URL=http://localhost:8000/v1");
-  } else if (spec.llm.provider === "claude") {
-    env.push("ANTHROPIC_API_KEY=");
-  } else if (spec.llm.provider === "openai") {
-    env.push("OPENAI_API_KEY=");
-  }
-  env.push(`LLM_MODEL=${spec.llm.model}`);
-  if (spec.database.rdb !== "none") env.push("DATABASE_URL=");
-  if (spec.rag.enabled) {
-    if (spec.rag.vectorDb === "qdrant") env.push("QDRANT_URL=http://localhost:6333");
-    if (spec.rag.vectorDb === "milvus") env.push("MILVUS_URI=http://localhost:19530");
-    env.push(`EMBEDDING_MODEL=${spec.rag.embedding}`);
-    if (ONPREM_EMBEDDINGS.includes(spec.rag.embedding)) {
-      env.push("# 온프레미스 임베딩은 API 가 아니라 추론 서버가 필요하다 (ARCHITECTURE.md)");
-      env.push("EMBEDDING_API_URL=http://localhost:8080/embed");
-    }
-  }
-  return env;
-}
+import type { GeneratedFile } from "../index";
+import { envEntries } from "./shared";
 
 function packageJson(spec: AgentSpec, slug: string): string {
   const deps: Record<string, string> = { express: "^4.21.2" };
@@ -519,9 +489,63 @@ ${streamFnCompat}${
       ? `
 export type ToolExec = Record<string, (args: Record<string, unknown>) => Promise<unknown>>;
 export interface ToolDef { name: string; description: string; input_schema: unknown; }
-// OpenAI 호환 tool-use(function calling) 루프 — TODO: tools 파라미터로 구현. 임시: 단순 complete.
-export async function completeWithTools(system: string, base: Msg[], _tools: readonly ToolDef[], _exec: ToolExec, _maxSteps: number): Promise<string> {
-  return complete(system, base);
+
+/**
+ * OpenAI 호환 function-calling 루프 — \`tools\`(type:"function") 로 전달하고,
+ * 응답에 \`tool_calls\` 가 있으면 exec 로 실행→\`role:"tool"\` 메시지로 회신→반복(최대 maxSteps).
+ */
+type OAIToolCall = { id: string; type: "function"; function: { name: string; arguments: string } };
+type OAIMessage = {
+  role: "system" | "user" | "assistant" | "tool";
+  content: string | null;
+  tool_calls?: OAIToolCall[];
+  tool_call_id?: string;
+};
+export async function completeWithTools(
+  system: string,
+  base: Msg[],
+  tools: readonly ToolDef[],
+  exec: ToolExec,
+  maxSteps: number,
+): Promise<string> {
+  const oaiTools = tools.map((t) => ({
+    type: "function" as const,
+    function: { name: t.name, description: t.description, parameters: t.input_schema },
+  }));
+  const messages: OAIMessage[] = [
+    { role: "system", content: system },
+    ...base.map((m) => ({ role: m.role, content: m.content })),
+  ];
+  for (let step = 0; step < maxSteps; step++) {
+    const res = await fetch(\`\${BASE_URL}/chat/completions\`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: ${spec.llm.params.maxTokens},
+        temperature: ${spec.llm.params.temperature},
+        messages,
+        tools: oaiTools,
+      }),
+    });
+    const data = await res.json();
+    const msg = data?.choices?.[0]?.message as OAIMessage | undefined;
+    if (!msg) return "";
+    const calls = msg.tool_calls;
+    if (calls && calls.length) {
+      messages.push({ role: "assistant", content: msg.content ?? null, tool_calls: calls });
+      for (const call of calls) {
+        const fn = exec[call.function.name];
+        let args: Record<string, unknown> = {};
+        try { args = JSON.parse(call.function.arguments || "{}"); } catch { /* 인자 파싱 실패 → 빈 객체 */ }
+        const out = fn ? await fn(args) : { error: "unknown tool" };
+        messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(out) });
+      }
+      continue;
+    }
+    return msg.content ?? "";
+  }
+  return "(최대 도구 호출 횟수를 초과했습니다.)";
 }
 `
       : ""
@@ -623,159 +647,6 @@ export async function search(query: string, topK = ${spec.rag.retrieval.topK ?? 
 `;
 }
 
-function chatUiHtml(spec: AgentSpec): string {
-  return `<!doctype html>
-<html lang="ko">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${spec.project.name || "챗봇"}</title>
-  <link rel="stylesheet" href="/styles.css" />
-</head>
-<body>
-  <main class="chat" role="main" aria-label="챗봇 대화">
-    <header class="chat__header">${spec.project.name || "안내 챗봇"}</header>
-    <div id="log" class="chat__log" aria-live="polite"></div>
-    <form id="form" class="chat__form">
-      <label for="msg" class="sr-only">메시지 입력</label>
-      <input id="msg" name="msg" class="chat__input" placeholder="무엇을 도와드릴까요?" autocomplete="off" />
-      <button type="submit" class="chat__send">전송</button>
-    </form>
-  </main>
-  <script src="/app.js" type="module"></script>
-</body>
-</html>
-`;
-}
-
-function chatUiJs(spec: AgentSpec): string {
-  const streaming = spec.interaction.streaming.enabled;
-  const session = spec.llm.session.multiTurn
-    ? `const SESSION_ID = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now());\n`
-    : `const SESSION_ID = undefined;\n`;
-  const handler = streaming
-    ? `form.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const message = input.value.trim();
-  if (!message) return;
-  add("user", message);
-  input.value = "";
-  const bot = add("bot", "");
-  try {
-    const res = await fetch("/api/chat/stream", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ message, sessionId: SESSION_ID }),
-    });
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let buf = "";
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      const parts = buf.split("\\n\\n");
-      buf = parts.pop() || "";
-      for (const p of parts) {
-        const line = p.split("\\n").find((l) => l.startsWith("data:"));
-        if (!line) continue;
-        try {
-          const ev = JSON.parse(line.slice(5).trim());
-          if (ev.trace) add("trace", "🔧 도구 호출: " + ev.trace.tool);
-          if (ev.delta) bot.textContent += ev.delta;
-          if (ev.sources) addSources(ev.sources);
-        } catch (_) { /* skip */ }
-      }
-      log.scrollTop = log.scrollHeight;
-    }
-  } catch (_) {
-    bot.textContent = "오류가 발생했습니다.";
-  }
-});`
-    : `form.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const message = input.value.trim();
-  if (!message) return;
-  add("user", message);
-  input.value = "";
-  try {
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ message, sessionId: SESSION_ID }),
-    });
-    const data = await res.json();
-    add("bot", data.answer ?? "(응답 없음)");
-    if (data.sources) addSources(data.sources);
-  } catch (_) {
-    add("bot", "오류가 발생했습니다.");
-  }
-});`;
-  return `// 최소 채팅 UI — ${streaming ? "/api/chat/stream (SSE 스트리밍)" : "/api/chat"} 호출. (PROMPT.md 지시로 디자인/접근성을 다듬는다)
-${session}const form = document.getElementById("form");
-const log = document.getElementById("log");
-const input = document.getElementById("msg");
-
-function add(role, text) {
-  const el = document.createElement("div");
-  el.className = "bubble bubble--" + role;
-  el.textContent = text;
-  log.appendChild(el);
-  log.scrollTop = log.scrollHeight;
-  return el;
-}
-
-// 출처(인용) 칩 렌더 — citationStyle 에 맞게 다듬는다.
-function addSources(sources) {
-  if (!sources || !sources.length) return;
-  const row = document.createElement("div");
-  row.className = "sources";
-  for (const s of sources) {
-    const c = document.createElement("span");
-    c.className = "chip";
-    c.textContent = s;
-    row.appendChild(c);
-  }
-  log.appendChild(row);
-  log.scrollTop = log.scrollHeight;
-}
-
-${handler}
-`;
-}
-
-function stylesCss(spec: AgentSpec): string {
-  // 레이아웃(design.layout)을 컨테이너 CSS 로 반영한다.
-  const layoutCss =
-    spec.design.layout === "floating-widget"
-      ? ".chat { position: fixed; bottom: 24px; right: 24px; width: 360px; height: 520px; max-height: 80vh; box-shadow: 0 8px 30px rgba(0,0,0,.18); border-radius: 16px; overflow: hidden; }"
-      : spec.design.layout === "side-panel"
-        ? ".chat { position: fixed; top: 0; right: 0; width: 380px; height: 100vh; box-shadow: -4px 0 20px rgba(0,0,0,.12); }"
-        : ".chat { max-width: 480px; margin: 0 auto; height: 100vh; }"; // full-page / iframe-embed
-  return `${tokensToCss(designTokens(spec))}
-
-* { box-sizing: border-box; }
-body { margin: 0; font-family: var(--font-body); color: var(--color-text); background: var(--color-background); }
-.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
-
-/* 레이아웃: ${spec.design.layout} */
-${layoutCss}
-.chat { display: flex; flex-direction: column; background: var(--color-background); }
-.chat__header { font-family: var(--font-heading); font-weight: 700; padding: 16px; background: var(--color-primary); color: #fff; }
-.chat__log { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; background: var(--color-surface); }
-.bubble { max-width: 80%; padding: 10px 14px; border-radius: var(--bubble-radius); line-height: 1.5; }
-.bubble--user { align-self: flex-end; background: var(--color-primary); color: #fff; }
-.bubble--bot { align-self: flex-start; background: #fff; border: 1px solid var(--color-border); }
-.bubble--trace { align-self: flex-start; background: transparent; border: 1px dashed var(--color-border); color: var(--color-muted); font-size: 12px; font-family: var(--font-mono, monospace); }
-.sources { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 4px; }
-.chip { font-size: 11px; padding: 2px 8px; border: 1px solid var(--color-border); border-radius: 999px; color: var(--color-muted); background: var(--color-surface); }
-.chat__form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--color-border); }
-.chat__input { flex: 1; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 8px; font: inherit; }
-.chat__send { padding: 10px 16px; border: none; border-radius: 8px; background: var(--color-accent); color: #fff; cursor: pointer; }
-.chat__send:focus-visible, .chat__input:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
-`;
-}
-
 function goldenTest(spec: AgentSpec): string {
   const cases =
     spec.evaluation.testset.length > 0
@@ -846,17 +717,14 @@ dist/
 *.log
 `;
 
-/** 스캐폴딩 파일 묶음 생성 */
-export function generateScaffold(spec: AgentSpec, slug: string): GeneratedFile[] {
+/** Node.js 백엔드 스캐폴드 파일 묶음 */
+export function nodeBackendFiles(spec: AgentSpec, slug: string): GeneratedFile[] {
   const files: GeneratedFile[] = [
     { path: "package.json", contents: packageJson(spec, slug) },
     { path: "tsconfig.json", contents: TSCONFIG },
     { path: "src/server.ts", contents: serverTs(spec) },
     { path: "src/chat.ts", contents: chatTs(spec) },
     { path: "src/llm/client.ts", contents: llmClientTs(spec) },
-    { path: "public/index.html", contents: chatUiHtml(spec) },
-    { path: "public/app.js", contents: chatUiJs(spec) },
-    { path: "public/styles.css", contents: stylesCss(spec) },
     { path: "tests/golden.test.ts", contents: goldenTest(spec) },
     { path: ".env.example", contents: envEntries(spec).join("\n") + "\n" },
     { path: ".gitignore", contents: GITIGNORE },
