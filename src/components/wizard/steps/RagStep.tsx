@@ -1,7 +1,7 @@
 "use client";
 
 import { useWizardStore } from "@/lib/store";
-import { RAG_SOURCES, CHUNKING_STRATEGIES, VECTOR_DBS, RETRIEVAL_STRATEGIES } from "@/lib/agent-spec";
+import { RAG_SOURCES, CHUNKING_STRATEGIES, VECTOR_DBS, RETRIEVAL_STRATEGIES, RAG_ACCESS_CONTROLS } from "@/lib/agent-spec";
 import {
   EMBEDDING_MODELS,
   VECTOR_DB_CATALOG,
@@ -194,6 +194,20 @@ export function RagStep() {
       />
 
       <ToggleField label="답변에 출처/페이지 표기 (공공 신뢰성)" checked={rag.citations} onChange={(v) => update("rag", { citations: v })} />
+
+      {/* 문서 권한 기반 검색 — OptionCards */}
+      <OptionCards
+        label="문서 접근 제어"
+        columns={3}
+        value={rag.accessControl}
+        onChange={(v) => update("rag", { accessControl: v as (typeof RAG_ACCESS_CONTROLS)[number] })}
+        options={[
+          { id: "none" as const, label: "전체 공개", description: "모든 이용자가 모든 문서를 검색" },
+          { id: "role-based" as const, label: "역할 기반", description: "이용자 권한(역할)에 따라 검색 범위 제한" },
+          { id: "department" as const, label: "부서 기반", description: "소속 부서 문서만 검색 (내부 업무봇)" },
+        ]}
+        hint="공개/내부 문서를 구분하면 본인확인(프론트엔드)과 함께 권한 검색을 구현합니다."
+      />
     </div>
   );
 }

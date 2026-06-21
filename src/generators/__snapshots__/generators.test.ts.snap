@@ -304,7 +304,8 @@ OO부 정보화담당관 챗봇 프로젝트.
     "rtl": false,
     "channels": [
       "web"
-    ]
+    ],
+    "userAuth": "none"
   },
   "backend": {
     "runtime": "node",
@@ -340,7 +341,8 @@ OO부 정보화담당관 챗봇 프로젝트.
       "strategy": "hybrid",
       "reranker": "bge-reranker"
     },
-    "citations": true
+    "citations": true,
+    "accessControl": "none"
   },
   "llm": {
     "provider": "opensource",
@@ -1035,7 +1037,8 @@ OO광역시 민원봉사과 챗봇 프로젝트.
     "rtl": false,
     "channels": [
       "web"
-    ]
+    ],
+    "userAuth": "none"
   },
   "backend": {
     "runtime": "node",
@@ -1070,7 +1073,8 @@ OO광역시 민원봉사과 챗봇 프로젝트.
     "retrieval": {
       "strategy": "hybrid"
     },
-    "citations": true
+    "citations": true,
+    "accessControl": "none"
   },
   "llm": {
     "provider": "claude",

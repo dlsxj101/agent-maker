@@ -124,6 +124,11 @@ describe("detectConflicts", () => {
     expect(ids(spec)).toContain("C18");
   });
 
+  it("문서 권한 검색 + 이용자 인증 없음이면 C19", () => {
+    const spec = createDraftSpec({ rag: { accessControl: "role-based" } });
+    expect(ids(spec)).toContain("C19");
+  });
+
   it("오프라인 설치 패키지 + 공식 API LLM 이면 C10", () => {
     const spec = createDraftSpec({
       llm: { serving: "official-api" },

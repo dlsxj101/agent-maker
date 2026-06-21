@@ -107,6 +107,7 @@ frontend: {
   localizeUi: boolean                  # UI 문구 다국어 현지화
   rtl: boolean                         # 우→좌 언어 지원
   channels: enum[]{ web | kakao-channel | kakao-alimtalk | app | slack | teams }  # 배포 채널
+  userAuth: enum{ none | simple-auth | gov-pki | membership }   # 이용자 본인확인/로그인
 }
 ```
 
@@ -175,6 +176,7 @@ rag: {
     reranker?: string                  # (catalog) 예: bge-reranker, none
   }
   citations: boolean                   # 답변에 출처/페이지 표기 (공공 신뢰성)
+  accessControl: enum{ none | role-based | department }   # 문서 권한 기반 검색
 }
 ```
 
@@ -482,6 +484,7 @@ ops: {
 | C16 | `backend.network=offline` + 클라우드 음성 엔진(clova/google) | 온프레미스 음성 엔진 권고 |
 | C17 | `backend.network=offline` + 외부 채널(kakao/slack/teams) | 웹/앱 위주 권고(외부망 연동 필요) |
 | C18 | `backend.network=offline` + `ops.observability.analytics=ga` | 자체 호스팅 분석(matomo/self-hosted) 권고 |
+| C19 | `rag.accessControl≠none` + `frontend.userAuth=none` | 권한 검색에 필요한 이용자 본인확인 설정 권고 |
 
 ### Export 차단 게이트 (검토 반영)
 

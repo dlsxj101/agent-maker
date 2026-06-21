@@ -1,7 +1,15 @@
 "use client";
 
 import { useWizardStore } from "@/lib/store";
-import { FRONTEND_FRAMEWORKS, EMBED_MODES, A11Y_LEVELS, DEPLOY_CHANNELS } from "@/lib/agent-spec";
+import { FRONTEND_FRAMEWORKS, EMBED_MODES, A11Y_LEVELS, DEPLOY_CHANNELS, USER_AUTH_MODES } from "@/lib/agent-spec";
+
+// 이용자 본인확인/로그인 방식
+const USER_AUTH_META: Record<(typeof USER_AUTH_MODES)[number], { label: string; description: string }> = {
+  none: { label: "비로그인", description: "본인확인 없이 누구나 이용 (일반 안내형)" },
+  "simple-auth": { label: "간편인증", description: "PASS·카카오 등 간편인증으로 본인확인" },
+  "gov-pki": { label: "공동/금융인증서", description: "공동인증서(GPKI/NPKI) — 민감 민원 본인확인" },
+  membership: { label: "회원 로그인", description: "자체 회원 계정 로그인" },
+};
 import { OptionCards, ToggleField, TextField, ChipMulti } from "../controls";
 
 // 배포 채널 라벨 (아이콘 포함)
@@ -104,6 +112,16 @@ export function FrontendStep() {
         options={DEPLOY_CHANNELS.map((c) => [c, CHANNEL_LABELS[c]])}
         hint="공공 민원은 카카오 채널/알림톡을 함께 쓰는 경우가 많습니다. (폐쇄망은 웹/앱 권장)"
       />
+      {/* 이용자 본인확인 */}
+      <OptionCards
+        label="이용자 본인확인/로그인"
+        columns={2}
+        value={fe.userAuth}
+        onChange={(v) => update("frontend", { userAuth: v as (typeof USER_AUTH_MODES)[number] })}
+        options={USER_AUTH_MODES.map((m) => ({ id: m, label: USER_AUTH_META[m].label, description: USER_AUTH_META[m].description }))}
+        hint="민감 민원(본인 정보 조회 등)은 본인확인이 필요합니다."
+      />
+
       <div className="grid grid-cols-2 gap-3">
         <ToggleField
           label="UI 문구 다국어 현지화"

@@ -144,6 +144,10 @@ export const AVATAR_STYLES = ["none", "initials", "icon", "image"] as const;
 export const DEPLOY_CHANNELS = ["web", "kakao-channel", "kakao-alimtalk", "app", "slack", "teams"] as const;
 export const ANALYTICS_PROVIDERS = ["none", "ga", "matomo", "self-hosted"] as const;
 
+// RAG 문서 접근 제어 / 이용자 본인확인
+export const RAG_ACCESS_CONTROLS = ["none", "role-based", "department"] as const;
+export const USER_AUTH_MODES = ["none", "simple-auth", "gov-pki", "membership"] as const;
+
 export const API_AUTH_MODES = ["none", "api-key", "oauth", "gpki"] as const;
 export const WEBHOOK_CHANNELS = ["email", "sms", "none"] as const;
 
@@ -250,6 +254,7 @@ const FrontendSchema = z
     localizeUi: z.boolean().default(false), // UI 문구 다국어 현지화
     rtl: z.boolean().default(false), // 우→좌 언어 지원
     channels: z.array(z.enum(DEPLOY_CHANNELS)).default(["web"]), // 배포 채널
+    userAuth: z.enum(USER_AUTH_MODES).default("none"), // 이용자 본인확인/로그인
   })
   .prefault({});
 
@@ -324,6 +329,7 @@ const RagSchema = z
       })
       .prefault({}),
     citations: z.boolean().default(true), // 출처/페이지 표기 (공공 신뢰성)
+    accessControl: z.enum(RAG_ACCESS_CONTROLS).default("none"), // 문서 권한 기반 검색
   })
   .prefault({});
 

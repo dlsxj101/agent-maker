@@ -210,6 +210,15 @@ export function detectConflicts(spec: AgentSpec): Conflict[] {
     });
   }
 
+  // C19: 문서 권한 기반 검색인데 이용자 인증이 없음
+  if (spec.rag.accessControl !== "none" && spec.frontend.userAuth === "none") {
+    out.push({
+      id: "C19",
+      section: "rag",
+      message: "문서 권한 기반 검색을 쓰려면 이용자 신원이 필요합니다. 프론트엔드에서 본인확인/로그인을 설정하세요.",
+    });
+  }
+
   // C14: 자동 압축을 켰는데 전략이 없음
   if (spec.agent.context.autoCompact && spec.agent.context.strategy === "none") {
     out.push({

@@ -69,10 +69,11 @@ export function renderPromptMd(spec: AgentSpec): string {
   );
   // 배포 채널 / 프론트 옵션
   const fe = spec.frontend;
-  if (fe.channels.length > 1 || fe.channels[0] !== "web" || fe.localizeUi || fe.rtl) {
+  if (fe.channels.length > 1 || fe.channels[0] !== "web" || fe.localizeUi || fe.rtl || fe.userAuth !== "none") {
     const chParts: string[] = [`배포 채널: ${fe.channels.join(", ")}`];
     if (fe.channels.some((c) => c.startsWith("kakao")))
       chParts.push("카카오 채널/알림톡은 비즈니스 채널 등록 + 메시지 템플릿 심사가 필요하니 연동 어댑터를 둔다");
+    if (fe.userAuth !== "none") chParts.push(`이용자 본인확인 "${fe.userAuth}"(민감 민원 전 신원 확인)`);
     if (fe.localizeUi) chParts.push("UI 문구 다국어 현지화(i18n 리소스 분리)");
     if (fe.rtl) chParts.push("RTL 레이아웃 지원");
     steps.push(`${n++}. **배포 채널/프론트 반영**: ${chParts.join(". ")}.`);
@@ -99,8 +100,10 @@ export function renderPromptMd(spec: AgentSpec): string {
       )} 적재→검색(${label("retrieval", spec.rag.retrieval.strategy)}). 답변에는 출처/페이지를 ${
         spec.rag.citations ? "반드시 표기한다" : "표기하지 않는다"
       }. RAG 골격 stub(\`src/rag/pipeline.ts\`)의 함수 시그니처를 채운다. \`search()\`가 빈 결과를 그대로 반환하지 않도록 한다.${
-        ragExtra.length ? " " + ragExtra.join(" ") : ""
-      }`,
+        spec.rag.accessControl !== "none"
+          ? ` 문서 접근 제어 "${spec.rag.accessControl}": 이용자 신원/권한으로 검색 결과를 필터링한다(공개/내부 문서 구분).`
+          : ""
+      }${ragExtra.length ? " " + ragExtra.join(" ") : ""}`,
     );
   }
   steps.push(

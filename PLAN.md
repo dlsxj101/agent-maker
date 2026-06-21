@@ -205,10 +205,10 @@ AgentSpec {
   meta:        { specVersion, createdAt, generatorVersion }
   project:     { org, dept, name, purpose[], audience[], languages[], deployEnv, traffic }
   design:      { theme, colors{...}, mode, fonts{...}, widgetStyle{...+avatarStyle}, layout }
-  frontend:    { framework, uiLib, embed, responsive, a11yLevel, localizeUi, rtl, channels[] }
+  frontend:    { framework, uiLib, embed, responsive, a11yLevel, localizeUi, rtl, channels[], userAuth }
   backend:     { runtime, framework, auth, deploy, network, logging, sla{...} }
   database:    { rdb, history, cache, fileStore }
-  rag:         { sources[], ingest, chunking{...}, embedding, vectorDb, retrieval{...}, citations }
+  rag:         { sources[], ingest, chunking{...}, embedding, vectorDb, retrieval{...}, citations, accessControl }
   llm:         { provider, model, serving, params{...}, guardrails{...}, routing, session{...}, budget{...} }
   conversation:{ persona{...}, intents[], quickReplies[], fallback{...}, i18n{...} }   # 신규
   interaction: { agentMode, toolPolicy, ..., voice{stt,tts}, disclaimer{...}, states{...}, a11yControls[], proactive{...}, inputLimits{...} }  # 신규(행동/UX)
