@@ -77,6 +77,7 @@ design: {
   widgetStyle: {
     bubbleRadius: enum{ sharp | rounded | pill }
     avatar: boolean
+    avatarStyle: enum{ none | initials | icon | image }   # 아바타 표현 방식
     align: enum{ left | right }        # 봇 말풍선 정렬
     inputStyle: enum{ box | underline | floating }
     density: enum{ compact | comfortable }
@@ -103,6 +104,9 @@ frontend: {
   embed: enum{ standalone-page | script-tag | iframe | npm-package }
   responsive: boolean
   a11yLevel: enum{ none | kwcag-a | kwcag-aa | kwcag-aaa }   # 웹 접근성 목표
+  localizeUi: boolean                  # UI 문구 다국어 현지화
+  rtl: boolean                         # 우→좌 언어 지원
+  channels: enum[]{ web | kakao-channel | kakao-alimtalk | app | slack | teams }  # 배포 채널
 }
 ```
 
@@ -246,6 +250,7 @@ conversation: {
     onUnknown: enum{ apologize | rephrase | handoff }   # 모르는 질문 처리
     handoff?: enum{ none | human-agent | phone | email } # 상담원 전환 수단
     handoffSlaMin?: number               # 상담사 연결 목표 응답시간(분)
+    showQueue: boolean                   # 대기열 순번/예상 대기시간 표시
     offHoursMessage?: string           # 운영시간 외 안내
   }
   i18n?: {                             # 다국어 응답 정책 (project.languages와 정합)
@@ -306,6 +311,8 @@ interaction: {
   }
   states: { error?: string, offline?: string, empty?: string }   # 상태 메시지
   a11yControls: enum[]{ font-size | high-contrast | screen-reader-hints }   # 접근성 사용자 컨트롤(KWCAG)
+  proactive: { followupSuggestions: boolean, reengageAfterMin?: number }   # 후속질문 추천 / 유휴 재참여
+  inputLimits: { maxChars?: number, maxFileMb?: number, allowedFileTypes?: string[] }   # 입력 제한
 }
 ```
 
@@ -435,10 +442,12 @@ ops: {
   observability?: {                    # 관측
     metrics: enum[]{ tokens | latency | error-rate | none }
     adminDashboard: boolean            # 관리자 대시보드
+    analytics: enum{ none | ga | matomo | self-hosted }   # 사용 분석 도구
     alertThreshold?: string            # 알림 임계치
   }
   performance?: {                      # 캐싱 등 (backend.sla와 연계)
     caching: enum[]{ prompt | embedding | response | tool-result | none }
+    promptCacheTtlSec?: number         # 프롬프트 캐시 TTL(초)
   }
   process?: {                          # 운영 프로세스
     kbUpdateCycle?: string             # 지식베이스 갱신 주기
@@ -471,6 +480,8 @@ ops: {
 | C14 | `agent.context.autoCompact=true` + `strategy=none` | 압축 전략 선택 권고 |
 | C15 | voice 모달리티 + `interaction.voice` 엔진 미선택 | STT/TTS 엔진 지정 권고 |
 | C16 | `backend.network=offline` + 클라우드 음성 엔진(clova/google) | 온프레미스 음성 엔진 권고 |
+| C17 | `backend.network=offline` + 외부 채널(kakao/slack/teams) | 웹/앱 위주 권고(외부망 연동 필요) |
+| C18 | `backend.network=offline` + `ops.observability.analytics=ga` | 자체 호스팅 분석(matomo/self-hosted) 권고 |
 
 ### Export 차단 게이트 (검토 반영)
 

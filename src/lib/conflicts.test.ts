@@ -108,6 +108,22 @@ describe("detectConflicts", () => {
     expect(ids(spec)).toContain("C16");
   });
 
+  it("폐쇄망 + 외부 채널이면 C17", () => {
+    const spec = createDraftSpec({
+      backend: { network: "offline" },
+      frontend: { channels: ["web", "kakao-channel"] },
+    });
+    expect(ids(spec)).toContain("C17");
+  });
+
+  it("폐쇄망 + GA 분석이면 C18", () => {
+    const spec = createDraftSpec({
+      backend: { network: "offline" },
+      ops: { observability: { analytics: "ga" } },
+    });
+    expect(ids(spec)).toContain("C18");
+  });
+
   it("오프라인 설치 패키지 + 공식 API LLM 이면 C10", () => {
     const spec = createDraftSpec({
       llm: { serving: "official-api" },

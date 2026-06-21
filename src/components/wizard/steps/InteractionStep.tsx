@@ -23,7 +23,7 @@ import {
   VOICE_TTS_ENGINES,
   A11Y_USER_CONTROLS,
 } from "@/lib/agent-spec";
-import { ToggleField, NumberField, ChipMulti, TextField, OptionCards } from "../controls";
+import { ToggleField, NumberField, ChipMulti, TextField, OptionCards, StringListField } from "../controls";
 import { InteractionPreview } from "../InteractionPreview";
 
 const L = INTERACTION_LABELS;
@@ -266,6 +266,44 @@ export function InteractionStep() {
         onChange={(v) => update("interaction", { a11yControls: v as typeof it.a11yControls })}
         options={opts(A11Y_USER_CONTROLS, A11Y_LABELS)}
       />
+
+      {/* 능동 상호작용 */}
+      <fieldset className="grid grid-cols-2 gap-3 rounded-md border border-border p-3">
+        <legend className="px-1 text-xs font-medium text-muted">능동 상호작용</legend>
+        <ToggleField
+          label="답변 후 후속 질문 추천"
+          checked={it.proactive.followupSuggestions}
+          onChange={(v) => update("interaction", { proactive: { ...it.proactive, followupSuggestions: v } })}
+        />
+        <NumberField
+          label="유휴 후 재참여(분)"
+          value={it.proactive.reengageAfterMin}
+          onChange={(v) => update("interaction", { proactive: { ...it.proactive, reengageAfterMin: v } })}
+        />
+      </fieldset>
+
+      {/* 입력 제한 */}
+      <fieldset className="space-y-3 rounded-md border border-border p-3">
+        <legend className="px-1 text-xs font-medium text-muted">입력 제한</legend>
+        <div className="grid grid-cols-2 gap-3">
+          <NumberField
+            label="입력 글자수 상한"
+            value={it.inputLimits.maxChars}
+            onChange={(v) => update("interaction", { inputLimits: { ...it.inputLimits, maxChars: v } })}
+          />
+          <NumberField
+            label="파일 크기 상한(MB)"
+            value={it.inputLimits.maxFileMb}
+            onChange={(v) => update("interaction", { inputLimits: { ...it.inputLimits, maxFileMb: v } })}
+          />
+        </div>
+        <StringListField
+          label="허용 파일 형식"
+          value={it.inputLimits.allowedFileTypes ?? []}
+          onChange={(v) => update("interaction", { inputLimits: { ...it.inputLimits, allowedFileTypes: v.length ? v : undefined } })}
+          placeholder="예: pdf, hwp, docx"
+        />
+      </fieldset>
     </div>
   );
 }

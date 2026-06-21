@@ -1,8 +1,18 @@
 "use client";
 
 import { useWizardStore } from "@/lib/store";
-import { FRONTEND_FRAMEWORKS, EMBED_MODES, A11Y_LEVELS } from "@/lib/agent-spec";
-import { OptionCards, ToggleField, TextField } from "../controls";
+import { FRONTEND_FRAMEWORKS, EMBED_MODES, A11Y_LEVELS, DEPLOY_CHANNELS } from "@/lib/agent-spec";
+import { OptionCards, ToggleField, TextField, ChipMulti } from "../controls";
+
+// 배포 채널 라벨 (아이콘 포함)
+const CHANNEL_LABELS: Record<(typeof DEPLOY_CHANNELS)[number], string> = {
+  web: "🌐 웹",
+  "kakao-channel": "💬 카카오 채널",
+  "kakao-alimtalk": "📨 카카오 알림톡",
+  app: "📱 모바일 앱",
+  slack: "🔷 Slack",
+  teams: "🟦 Teams",
+};
 
 // 프레임워크별 한 줄 설명 (한국어)
 const FRAMEWORK_DESC: Record<(typeof FRONTEND_FRAMEWORKS)[number], string> = {
@@ -85,6 +95,27 @@ export function FrontendStep() {
         checked={fe.responsive}
         onChange={(v) => update("frontend", { responsive: v })}
       />
+
+      {/* 배포 채널 */}
+      <ChipMulti
+        label="배포 채널"
+        value={fe.channels}
+        onChange={(v) => update("frontend", { channels: v as typeof fe.channels })}
+        options={DEPLOY_CHANNELS.map((c) => [c, CHANNEL_LABELS[c]])}
+        hint="공공 민원은 카카오 채널/알림톡을 함께 쓰는 경우가 많습니다. (폐쇄망은 웹/앱 권장)"
+      />
+      <div className="grid grid-cols-2 gap-3">
+        <ToggleField
+          label="UI 문구 다국어 현지화"
+          checked={fe.localizeUi}
+          onChange={(v) => update("frontend", { localizeUi: v })}
+        />
+        <ToggleField
+          label="RTL(우→좌) 언어 지원"
+          checked={fe.rtl}
+          onChange={(v) => update("frontend", { rtl: v })}
+        />
+      </div>
     </div>
   );
 }

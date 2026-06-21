@@ -1,8 +1,15 @@
 "use client";
 
 import { useWizardStore } from "@/lib/store";
-import { OBSERVABILITY_METRICS, CACHING_LAYERS } from "@/lib/agent-spec";
-import { ToggleField, ChipMulti, TextField, Field } from "../controls";
+import { OBSERVABILITY_METRICS, CACHING_LAYERS, ANALYTICS_PROVIDERS } from "@/lib/agent-spec";
+import { ToggleField, ChipMulti, TextField, Field, OptionCards, NumberField } from "../controls";
+
+const ANALYTICS_LABELS: Record<(typeof ANALYTICS_PROVIDERS)[number], string> = {
+  none: "없음",
+  ga: "Google Analytics",
+  matomo: "Matomo",
+  "self-hosted": "자체 호스팅",
+};
 
 const OBS_LABELS: Record<string, string> = {
   tokens: "토큰",
@@ -38,9 +45,10 @@ export function OpsStep() {
             onChange={(v) =>
               update("ops", {
                 observability: {
+                  ...ops.observability,
                   metrics: v as ("tokens" | "latency" | "error-rate" | "none")[],
                   adminDashboard: ops.observability?.adminDashboard ?? false,
-                  alertThreshold: ops.observability?.alertThreshold,
+                  analytics: ops.observability?.analytics ?? "none",
                 },
               })
             }
@@ -52,12 +60,29 @@ export function OpsStep() {
             onChange={(v) =>
               update("ops", {
                 observability: {
+                  ...ops.observability,
                   metrics: ops.observability?.metrics ?? [],
                   adminDashboard: v,
-                  alertThreshold: ops.observability?.alertThreshold,
+                  analytics: ops.observability?.analytics ?? "none",
                 },
               })
             }
+          />
+          <OptionCards
+            label="사용 분석 도구"
+            columns={4}
+            value={ops.observability?.analytics ?? "none"}
+            onChange={(v) =>
+              update("ops", {
+                observability: {
+                  ...ops.observability,
+                  metrics: ops.observability?.metrics ?? [],
+                  adminDashboard: ops.observability?.adminDashboard ?? false,
+                  analytics: v as (typeof ANALYTICS_PROVIDERS)[number],
+                },
+              })
+            }
+            options={ANALYTICS_PROVIDERS.map((a) => ({ id: a, label: ANALYTICS_LABELS[a] }))}
           />
         </div>
       </Field>
@@ -66,10 +91,20 @@ export function OpsStep() {
         label="캐싱 전략"
         value={ops.performance?.caching ?? []}
         onChange={(v) =>
-          update("ops", { performance: { caching: v as typeof CACHING_LAYERS[number][] } })
+          update("ops", { performance: { ...ops.performance, caching: v as typeof CACHING_LAYERS[number][] } })
         }
         options={CACHING_LAYERS.map((c) => [c, CACHE_LABELS[c] ?? c])}
       />
+      {(ops.performance?.caching ?? []).includes("prompt") && (
+        <NumberField
+          label="프롬프트 캐시 TTL(초)"
+          value={ops.performance?.promptCacheTtlSec}
+          onChange={(v) =>
+            update("ops", { performance: { ...ops.performance, caching: ops.performance?.caching ?? [], promptCacheTtlSec: v } })
+          }
+          hint="프롬프트 캐시 유지 시간. 예: 300"
+        />
+      )}
 
       <TextField
         label="지식베이스 갱신 주기 (선택)"

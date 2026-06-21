@@ -195,7 +195,7 @@ CMD ["npm", "start"]
 
 1. **프로젝트 골격 확인**: 이 폴더의 \`agent-spec.json\`(정본), \`DESIGN.md\`, \`ARCHITECTURE.md\`, \`CLAUDE.md\`를 먼저 읽는다. 모든 결정은 \`agent-spec.json\`을 따른다.
 2. **의존성 설치 & 기동 검증**: 동봉된 매니페스트로 의존성을 설치하고, 진입점(\`/health\`)이 떠서 200을 반환하는지 확인한다. 여기서 빌드/기동이 깨지면 먼저 고친다. **테스트/오프라인 환경에서는 \`LLM_STUB=true\`로 실제 LLM 호출 없이 플러밍을 검증**하고, 실제 키(예: \`ANTHROPIC_API_KEY\`)는 \`.env\`에 둔다.
-3. **디자인 토큰 적용**: \`DESIGN.md\`의 컬러/폰트/위젯 토큰을 UI에 반영한다. 색은 직접 hex가 아니라 CSS 변수로 쓴다. 레이아웃은 "전체 페이지형".
+3. **디자인 토큰 적용**: \`DESIGN.md\`의 컬러/폰트/위젯 토큰을 UI에 반영한다. 색은 직접 hex가 아니라 CSS 변수로 쓴다. 레이아웃은 "전체 페이지형". 봇 아바타 스타일 "initials".
 4. **RAG 파이프라인 구현**: 적재→청킹(문단 단위)→임베딩(bge-m3)→Qdrant 적재→검색(하이브리드(BM25+벡터)). 답변에는 출처/페이지를 반드시 표기한다. RAG 골격 stub(\`src/rag/pipeline.ts\`)의 함수 시그니처를 채운다. \`search()\`가 빈 결과를 그대로 반환하지 않도록 한다. HWP(한글)는 표준 Node 파서가 없으므로 변환 전략(libreoffice 변환 또는 hwp.js 등)을 먼저 정해 적재 단계에 반영한다. 임베딩 \`bge-m3\`은 API가 아니라 별도 추론 서버가 필요하다 — \`EMBEDDING_API_URL\` 엔드포인트로 연결한다(ARCHITECTURE 참조).
 5. **LLM 연동**: 오픈소스/온프레미스 / 모델 EXAONE 3.5 (LG·국산) / 호출 방식 사내 추론 서버(vLLM/Ollama/TGI). 시스템 프롬프트는 간결 톤. 가드레일: 근거기반 예, 민감정보 필터 예.
 6. **대화 설계 반영**: 페르소나/인텐트/빠른응답/폴백(정중히 한계 안내)을 구현한다. 인텐트가 비어 있으면 \`agent-spec.json\`의 \`conversation\`을 보고 대표 시나리오를 먼저 정의한다.
@@ -288,6 +288,7 @@ OO부 정보화담당관 챗봇 프로젝트.
     "widgetStyle": {
       "bubbleRadius": "rounded",
       "avatar": true,
+      "avatarStyle": "initials",
       "align": "left",
       "inputStyle": "box",
       "density": "comfortable"
@@ -298,7 +299,12 @@ OO부 정보화담당관 챗봇 프로젝트.
     "framework": "react",
     "embed": "standalone-page",
     "responsive": true,
-    "a11yLevel": "kwcag-aaa"
+    "a11yLevel": "kwcag-aaa",
+    "localizeUi": false,
+    "rtl": false,
+    "channels": [
+      "web"
+    ]
   },
   "backend": {
     "runtime": "node",
@@ -362,7 +368,8 @@ OO부 정보화담당관 챗봇 프로젝트.
       }
     ],
     "fallback": {
-      "onUnknown": "apologize"
+      "onUnknown": "apologize",
+      "showQueue": false
     }
   },
   "interaction": {
@@ -402,7 +409,11 @@ OO부 정보화담당관 챗봇 프로젝트.
       "consent": false
     },
     "states": {},
-    "a11yControls": []
+    "a11yControls": [],
+    "proactive": {
+      "followupSuggestions": false
+    },
+    "inputLimits": {}
   },
   "agent": {
     "askUser": false,
@@ -914,7 +925,7 @@ CMD ["npm", "start"]
 
 1. **프로젝트 골격 확인**: 이 폴더의 \`agent-spec.json\`(정본), \`DESIGN.md\`, \`ARCHITECTURE.md\`, \`CLAUDE.md\`를 먼저 읽는다. 모든 결정은 \`agent-spec.json\`을 따른다.
 2. **의존성 설치 & 기동 검증**: 동봉된 매니페스트로 의존성을 설치하고, 진입점(\`/health\`)이 떠서 200을 반환하는지 확인한다. 여기서 빌드/기동이 깨지면 먼저 고친다. **테스트/오프라인 환경에서는 \`LLM_STUB=true\`로 실제 LLM 호출 없이 플러밍을 검증**하고, 실제 키(예: \`ANTHROPIC_API_KEY\`)는 \`.env\`에 둔다.
-3. **디자인 토큰 적용**: \`DESIGN.md\`의 컬러/폰트/위젯 토큰을 UI에 반영한다. 색은 직접 hex가 아니라 CSS 변수로 쓴다. 레이아웃은 "우하단 플로팅 위젯".
+3. **디자인 토큰 적용**: \`DESIGN.md\`의 컬러/폰트/위젯 토큰을 UI에 반영한다. 색은 직접 hex가 아니라 CSS 변수로 쓴다. 레이아웃은 "우하단 플로팅 위젯". 봇 아바타 스타일 "initials".
 4. **RAG 파이프라인 구현**: 적재→청킹(문단 단위)→임베딩(bge-m3)→pgvector 적재→검색(하이브리드(BM25+벡터)). 답변에는 출처/페이지를 반드시 표기한다. RAG 골격 stub(\`src/rag/pipeline.ts\`)의 함수 시그니처를 채운다. \`search()\`가 빈 결과를 그대로 반환하지 않도록 한다. HWP(한글)는 표준 Node 파서가 없으므로 변환 전략(libreoffice 변환 또는 hwp.js 등)을 먼저 정해 적재 단계에 반영한다. 임베딩 \`bge-m3\`은 API가 아니라 별도 추론 서버가 필요하다 — \`EMBEDDING_API_URL\` 엔드포인트로 연결한다(ARCHITECTURE 참조).
 5. **LLM 연동**: Claude (Anthropic) / 모델 Claude Sonnet 4.6 / 호출 방식 공식 API. 시스템 프롬프트는 공손/격식 톤. 가드레일: 근거기반 예, 민감정보 필터 예.
 6. **대화 설계 반영**: 페르소나/인텐트/빠른응답/폴백(상담사 연결)을 구현한다. 인텐트가 비어 있으면 \`agent-spec.json\`의 \`conversation\`을 보고 대표 시나리오를 먼저 정의한다. 상담사 연결(human-agent).
@@ -1008,6 +1019,7 @@ OO광역시 민원봉사과 챗봇 프로젝트.
     "widgetStyle": {
       "bubbleRadius": "rounded",
       "avatar": true,
+      "avatarStyle": "initials",
       "align": "left",
       "inputStyle": "box",
       "density": "comfortable"
@@ -1018,7 +1030,12 @@ OO광역시 민원봉사과 챗봇 프로젝트.
     "framework": "nextjs",
     "embed": "standalone-page",
     "responsive": true,
-    "a11yLevel": "kwcag-aa"
+    "a11yLevel": "kwcag-aa",
+    "localizeUi": false,
+    "rtl": false,
+    "channels": [
+      "web"
+    ]
   },
   "backend": {
     "runtime": "node",
@@ -1086,7 +1103,8 @@ OO광역시 민원봉사과 챗봇 프로젝트.
     ],
     "fallback": {
       "onUnknown": "handoff",
-      "handoff": "human-agent"
+      "handoff": "human-agent",
+      "showQueue": false
     }
   },
   "interaction": {
@@ -1126,7 +1144,11 @@ OO광역시 민원봉사과 챗봇 프로젝트.
       "consent": false
     },
     "states": {},
-    "a11yControls": []
+    "a11yControls": [],
+    "proactive": {
+      "followupSuggestions": false
+    },
+    "inputLimits": {}
   },
   "agent": {
     "askUser": false,

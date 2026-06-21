@@ -189,6 +189,27 @@ export function detectConflicts(spec: AgentSpec): Conflict[] {
     });
   }
 
+  // C17: 폐쇄망인데 외부 메신저 채널
+  if (spec.backend.network === "offline") {
+    const ext = spec.frontend.channels.filter((c) => c !== "web" && c !== "app");
+    if (ext.length > 0) {
+      out.push({
+        id: "C17",
+        section: "frontend",
+        message: `폐쇄망 환경인데 외부 채널(${ext.join(", ")})이 선택됐습니다. 외부망 연동이 필요하니 웹/앱 위주로 검토하세요.`,
+      });
+    }
+  }
+
+  // C18: 폐쇄망인데 외부 분석 도구(GA)
+  if (spec.backend.network === "offline" && spec.ops.observability?.analytics === "ga") {
+    out.push({
+      id: "C18",
+      section: "ops",
+      message: "폐쇄망 환경에 Google Analytics가 선택됐습니다. 자체 호스팅 분석(matomo/self-hosted)을 쓰세요.",
+    });
+  }
+
   // C14: 자동 압축을 켰는데 전략이 없음
   if (spec.agent.context.autoCompact && spec.agent.context.strategy === "none") {
     out.push({

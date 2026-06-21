@@ -14,8 +14,33 @@ import {
   BUBBLE_ALIGNS,
   INPUT_STYLES,
   DENSITIES,
+  AVATAR_STYLES,
 } from "@/lib/agent-spec";
 import { label } from "@/generators/format";
+import { OptionCards } from "../controls";
+
+const AVATAR_DESC: Record<(typeof AVATAR_STYLES)[number], string> = {
+  none: "아바타 없음",
+  initials: "기관 이니셜 원형",
+  icon: "아이콘(🤖)",
+  image: "이미지 업로드",
+};
+const AVATAR_LABEL: Record<(typeof AVATAR_STYLES)[number], string> = {
+  none: "없음",
+  initials: "이니셜",
+  icon: "아이콘",
+  image: "이미지",
+};
+
+function AvatarPrev({ id }: { id: (typeof AVATAR_STYLES)[number] }) {
+  if (id === "none") return <span className="text-[11px] text-muted">—</span>;
+  const inner = id === "initials" ? "기" : id === "icon" ? "🤖" : "🖼";
+  return (
+    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-[11px] text-white">
+      {inner}
+    </span>
+  );
+}
 
 const COLOR_KEYS = [
   ["primary", "주색"],
@@ -137,6 +162,22 @@ export function DesignStep() {
           />
           봇 아바타 표시
         </label>
+        {ws.avatar && (
+          <div className="col-span-2">
+            <OptionCards
+              label="아바타 스타일"
+              columns={4}
+              value={ws.avatarStyle}
+              onChange={(v) => update("design", { widgetStyle: { ...ws, avatarStyle: v as typeof ws.avatarStyle } })}
+              options={AVATAR_STYLES.map((a) => ({
+                id: a,
+                label: AVATAR_LABEL[a],
+                description: AVATAR_DESC[a],
+                preview: <AvatarPrev id={a} />,
+              }))}
+            />
+          </div>
+        )}
       </section>
 
       {/* 모드 / 레이아웃 */}

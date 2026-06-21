@@ -2,7 +2,7 @@
 
 import { useWizardStore } from "@/lib/store";
 import { PERSONA_TONES, FALLBACK_ON_UNKNOWN, HANDOFF_MODES } from "@/lib/agent-spec";
-import { OptionCards, TextField, StringListField, Field, NumberField } from "../controls";
+import { OptionCards, TextField, StringListField, Field, NumberField, ToggleField } from "../controls";
 
 /* -------------------------------------------------------------------------- */
 /* 말투/톤 — 예시 발화로 느낌을 즉시 체감할 수 있는 카드 옵션                       */
@@ -167,12 +167,19 @@ export function ConversationStep() {
         hint="민원 챗봇은 상담사 연결을 권장합니다."
       />
       {conv.fallback.handoff && conv.fallback.handoff !== "none" && (
-        <NumberField
-          label="상담사 연결 목표 응답시간(분, SLA)"
-          value={conv.fallback.handoffSlaMin}
-          onChange={(v) => update("conversation", { fallback: { ...conv.fallback, handoffSlaMin: v } })}
-          hint="예: 5 (5분 내 상담사 연결 목표)"
-        />
+        <>
+          <NumberField
+            label="상담사 연결 목표 응답시간(분, SLA)"
+            value={conv.fallback.handoffSlaMin}
+            onChange={(v) => update("conversation", { fallback: { ...conv.fallback, handoffSlaMin: v } })}
+            hint="예: 5 (5분 내 상담사 연결 목표)"
+          />
+          <ToggleField
+            label="대기열 순번/예상 대기시간 표시"
+            checked={conv.fallback.showQueue}
+            onChange={(v) => update("conversation", { fallback: { ...conv.fallback, showQueue: v } })}
+          />
+        </>
       )}
     </div>
   );

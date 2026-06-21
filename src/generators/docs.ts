@@ -65,8 +65,18 @@ export function renderPromptMd(spec: AgentSpec): string {
     `${n++}. **디자인 토큰 적용**: \`DESIGN.md\`의 컬러/폰트/위젯 토큰을 UI에 반영한다. 색은 직접 hex가 아니라 CSS 변수로 쓴다. 레이아웃은 "${label(
       "layout",
       spec.design.layout,
-    )}".`,
+    )}".${spec.design.widgetStyle.avatar ? ` 봇 아바타 스타일 "${spec.design.widgetStyle.avatarStyle}".` : ""}`,
   );
+  // 배포 채널 / 프론트 옵션
+  const fe = spec.frontend;
+  if (fe.channels.length > 1 || fe.channels[0] !== "web" || fe.localizeUi || fe.rtl) {
+    const chParts: string[] = [`배포 채널: ${fe.channels.join(", ")}`];
+    if (fe.channels.some((c) => c.startsWith("kakao")))
+      chParts.push("카카오 채널/알림톡은 비즈니스 채널 등록 + 메시지 템플릿 심사가 필요하니 연동 어댑터를 둔다");
+    if (fe.localizeUi) chParts.push("UI 문구 다국어 현지화(i18n 리소스 분리)");
+    if (fe.rtl) chParts.push("RTL 레이아웃 지원");
+    steps.push(`${n++}. **배포 채널/프론트 반영**: ${chParts.join(". ")}.`);
+  }
   if (ragOn) {
     const ragExtra: string[] = [];
     if (spec.rag.sources.includes("upload-hwp")) {
@@ -109,7 +119,7 @@ export function renderPromptMd(spec: AgentSpec): string {
       spec.conversation.fallback.onUnknown,
     )})을 구현한다. 인텐트가 비어 있으면 \`agent-spec.json\`의 \`conversation\`을 보고 대표 시나리오를 먼저 정의한다.${
       spec.conversation.fallback.handoff && spec.conversation.fallback.handoff !== "none"
-        ? ` 상담사 연결(${spec.conversation.fallback.handoff})${spec.conversation.fallback.handoffSlaMin ? `, 목표 ${spec.conversation.fallback.handoffSlaMin}분 내` : ""}.`
+        ? ` 상담사 연결(${spec.conversation.fallback.handoff})${spec.conversation.fallback.handoffSlaMin ? `, 목표 ${spec.conversation.fallback.handoffSlaMin}분 내` : ""}${spec.conversation.fallback.showQueue ? ", 대기열 순번/대기시간 표시" : ""}.`
         : ""
     }`,
   );
@@ -147,6 +157,16 @@ export function renderPromptMd(spec: AgentSpec): string {
   }
   if (it.a11yControls.length) {
     interactionExtra.push(`접근성 컨트롤: ${it.a11yControls.join(", ")} (KWCAG).`);
+  }
+  if (it.proactive.followupSuggestions || it.proactive.reengageAfterMin) {
+    interactionExtra.push(
+      `능동: ${[it.proactive.followupSuggestions && "후속 질문 추천", it.proactive.reengageAfterMin && `${it.proactive.reengageAfterMin}분 유휴 재참여`].filter(Boolean).join(", ")}.`,
+    );
+  }
+  if (it.inputLimits.maxChars || it.inputLimits.maxFileMb || it.inputLimits.allowedFileTypes?.length) {
+    interactionExtra.push(
+      `입력 제한: ${[it.inputLimits.maxChars && `${it.inputLimits.maxChars}자`, it.inputLimits.maxFileMb && `${it.inputLimits.maxFileMb}MB`, it.inputLimits.allowedFileTypes?.length && `형식 ${it.inputLimits.allowedFileTypes.join("/")}`].filter(Boolean).join(", ")}.`,
+    );
   }
   steps.push(
     `${n++}. **상호작용/동작 방식 구현**: 동작 방식은 ${modeLabel}. ${interactionExtra.join(" ")} 대화 컨트롤: ${
@@ -186,6 +206,14 @@ export function renderPromptMd(spec: AgentSpec): string {
       spec.backend.logging.audit || spec.ops.audit,
     )})를 최종 확인한다. 동봉된 감사 로그 미들웨어·마스킹 유틸 stub을 실제 정책에 맞게 채운다.`,
   );
+  const obs = spec.ops.observability;
+  const perf = spec.ops.performance;
+  const opsParts: string[] = [];
+  if (obs?.analytics && obs.analytics !== "none") opsParts.push(`사용 분석 도구 "${obs.analytics}" 연동`);
+  if (perf?.caching.length) opsParts.push(`캐시 계층 ${perf.caching.join("/")}${perf.promptCacheTtlSec ? ` (프롬프트 TTL ${perf.promptCacheTtlSec}s)` : ""}`);
+  if (opsParts.length) {
+    steps.push(`${n++}. **운영/관측 반영**: ${opsParts.join(", ")}.`);
+  }
 
   return `# 구현 지시 (Claude Code 마스터 프롬프트)
 

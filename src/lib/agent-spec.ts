@@ -139,6 +139,11 @@ export const VOICE_TTS_ENGINES = ["none", "browser", "coqui-local", "clova", "go
 // 접근성 사용자 컨트롤 (KWCAG)
 export const A11Y_USER_CONTROLS = ["font-size", "high-contrast", "screen-reader-hints"] as const;
 
+// 봇 아바타 스타일 / 배포 채널 / 분석 도구
+export const AVATAR_STYLES = ["none", "initials", "icon", "image"] as const;
+export const DEPLOY_CHANNELS = ["web", "kakao-channel", "kakao-alimtalk", "app", "slack", "teams"] as const;
+export const ANALYTICS_PROVIDERS = ["none", "ga", "matomo", "self-hosted"] as const;
+
 export const API_AUTH_MODES = ["none", "api-key", "oauth", "gpki"] as const;
 export const WEBHOOK_CHANNELS = ["email", "sms", "none"] as const;
 
@@ -207,6 +212,7 @@ const WidgetStyleSchema = z
   .object({
     bubbleRadius: z.enum(BUBBLE_RADII).default("rounded"),
     avatar: z.boolean().default(true),
+    avatarStyle: z.enum(AVATAR_STYLES).default("initials"), // 아바타 표현 방식
     align: z.enum(BUBBLE_ALIGNS).default("left"), // 봇 말풍선 정렬
     inputStyle: z.enum(INPUT_STYLES).default("box"),
     density: z.enum(DENSITIES).default("comfortable"),
@@ -241,6 +247,9 @@ const FrontendSchema = z
     embed: z.enum(EMBED_MODES).default("standalone-page"),
     responsive: z.boolean().default(true),
     a11yLevel: z.enum(A11Y_LEVELS).default("kwcag-aa"),
+    localizeUi: z.boolean().default(false), // UI 문구 다국어 현지화
+    rtl: z.boolean().default(false), // 우→좌 언어 지원
+    channels: z.array(z.enum(DEPLOY_CHANNELS)).default(["web"]), // 배포 채널
   })
   .prefault({});
 
@@ -387,6 +396,7 @@ const ConversationSchema = z
         onUnknown: z.enum(FALLBACK_ON_UNKNOWN).default("apologize"),
         handoff: z.enum(HANDOFF_MODES).optional(),
         handoffSlaMin: z.number().optional(), // 상담사 연결 목표 응답시간(분)
+        showQueue: z.boolean().default(false), // 대기열 순번/예상 대기시간 표시
         offHoursMessage: z.string().optional(),
       })
       .prefault({}),
@@ -465,6 +475,21 @@ const InteractionSchema = z
       .prefault({}),
     // 접근성 사용자 컨트롤 (KWCAG)
     a11yControls: z.array(z.enum(A11Y_USER_CONTROLS)).default([]),
+    // 능동 상호작용 (후속 질문 추천 / 유휴 재참여)
+    proactive: z
+      .object({
+        followupSuggestions: z.boolean().default(false), // 답변 후 후속 질문 추천
+        reengageAfterMin: z.number().optional(), // 유휴 후 재참여(분)
+      })
+      .prefault({}),
+    // 입력 제한
+    inputLimits: z
+      .object({
+        maxChars: z.number().optional(), // 입력 글자수 상한
+        maxFileMb: z.number().optional(), // 업로드 파일 크기 상한(MB)
+        allowedFileTypes: z.array(z.string()).optional(), // 허용 확장자
+      })
+      .prefault({}),
   })
   .prefault({});
 
@@ -616,11 +641,13 @@ const OpsSchema = z
         metrics: z.array(z.enum(OBSERVABILITY_METRICS)).default([]),
         adminDashboard: z.boolean().default(false),
         alertThreshold: z.string().optional(),
+        analytics: z.enum(ANALYTICS_PROVIDERS).default("none"), // 사용 분석 도구
       })
       .optional(),
     performance: z
       .object({
         caching: z.array(z.enum(CACHING_LAYERS)).default([]),
+        promptCacheTtlSec: z.number().optional(), // 프롬프트 캐시 TTL(초)
       })
       .optional(),
     process: z
