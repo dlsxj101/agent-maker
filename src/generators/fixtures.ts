@@ -75,5 +75,43 @@ export const airgapSpec: AgentSpec = createDraftSpec({
   },
 });
 
+/** 도구호출 에이전트 프로필 (tool-agent + 도구 정의 + 스트리밍 + 멀티턴 + RAG) */
+export const toolAgentSpec: AgentSpec = createDraftSpec({
+  project: {
+    org: "OO구",
+    dept: "민원여권과",
+    name: "OO구 업무 에이전트",
+    purpose: ["civil-complaint", "booking"],
+    audience: ["citizen"],
+    languages: ["ko"],
+    deployEnv: "gov-cloud",
+    traffic: "high",
+  },
+  design: { theme: "gov-blue", layout: "side-panel" },
+  llm: { provider: "claude", model: "claude-sonnet-4-6", serving: "official-api" },
+  rag: { enabled: true, sources: ["upload-pdf"], vectorDb: "pgvector", embedding: "bge-m3" },
+  interaction: {
+    agentMode: "tool-agent",
+    toolPolicy: "confirm",
+    maxSteps: 3,
+    rendering: { toolCallDisplay: "expanded" },
+  },
+  integrations: {
+    tools: [
+      { name: "search_minwon", description: "민원 사례/절차 검색" },
+      { name: "book_appointment", description: "방문 예약 생성" },
+    ],
+  },
+  conversation: {
+    persona: { tone: "formal" },
+    intents: [{ name: "여권 발급 예약" }],
+    fallback: { onUnknown: "handoff", handoff: "human-agent" },
+  },
+  evaluation: {
+    testset: [{ question: "여권 발급 예약하려면?", expectedSource: "여권민원안내.pdf" }],
+    metrics: ["retrieval-hit"],
+  },
+});
+
 /** 결정성 테스트용 고정 시각 */
 export const FIXED_NOW = new Date("2026-06-20T00:00:00.000Z");

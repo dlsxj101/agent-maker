@@ -93,9 +93,34 @@ app.use((req, _res, next) => {
 });
 `
     : "";
+  const streaming = spec.interaction.streaming.enabled;
+  const streamRoute = streaming
+    ? `
+// 스트리밍 채팅 (SSE) — interaction.streaming.enabled=true
+app.post("/api/chat/stream", async (req, res) => {
+  const { message, sessionId } = req.body ?? {};
+  if (typeof message !== "string" || !message.trim()) {
+    res.status(400).json({ error: "message 가 필요합니다." });
+    return;
+  }
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  try {
+    for await (const ev of answerStream(message, sessionId)) {
+      res.write(\`data: \${JSON.stringify(ev)}\\n\\n\`);
+    }
+  } catch {
+    res.write('event: error\\ndata: {}\\n\\n');
+  }
+  res.write('event: done\\ndata: {}\\n\\n');
+  res.end();
+});
+`
+    : "";
   return `// 진입점 — 헬스체크 + 채팅 API 골격. (PROMPT.md 지시에 따라 로직을 채운다)
 import express from "express";
-import { answer } from "./chat.js";
+import { answer${streaming ? ", answerStream" : ""} } from "./chat.js";
 
 const app = express();
 app.use(express.json());
@@ -106,81 +131,112 @@ app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 // 채팅: 사용자 질문 → (RAG 검색) → LLM 답변
 app.post("/api/chat", async (req, res) => {
-  const { message } = req.body ?? {};
+  const { message, sessionId } = req.body ?? {};
   if (typeof message !== "string" || !message.trim()) {
     res.status(400).json({ error: "message 가 필요합니다." });
     return;
   }
   try {
-    const result = await answer(message);
+    const result = await answer(message, sessionId);
     res.json(result);
   } catch {
     res.status(500).json({ error: "처리 중 오류가 발생했습니다." });
   }
 });
-
+${streamRoute}
 const port = Number(process.env.PORT ?? 3000);
 app.listen(port, () => console.log(\`server on :\${port}\`));
 `;
 }
 
 function chatTs(spec: AgentSpec): string {
-  const ragImport = spec.rag.enabled ? `import { search } from "./rag/pipeline.js";\n` : "";
-  const ragCall = spec.rag.enabled
-    ? `  const chunks = await search(message);\n  const contexts = chunks.map((c) => c.text);\n  const sources = chunks.map((c) => (c.page ? c.source + " p." + c.page : c.source));\n`
-    : "  const contexts: string[] = [];\n  const sources: string[] = [];\n";
-  const citationNote = spec.rag.citations
-    ? "  // 출처 표기(citations=true): sources 를 답변과 함께 노출한다.\n"
-    : "";
-  // 마스킹: 개인정보 수집+마스킹이거나, 가드레일 PII 필터가 켜진 경우(방어적 출력 필터) 적용
+  const it = spec.interaction;
+  const rag = spec.rag.enabled;
+  const streaming = it.streaming.enabled;
+  const toolAgent = it.agentMode === "tool-agent";
+  const multiTurn = spec.llm.session.multiTurn;
+  const maxSteps = it.maxSteps ?? 5;
+  const histMsgs = (spec.llm.session.historyTurns ?? 10) * 2;
   const masking =
     spec.compliance.privacy.masking &&
     (spec.compliance.privacy.collectsPii || spec.llm.guardrails.piiFilter);
+  const safe = (v: string) => (masking ? `maskPii(${v})` : v);
+
+  const imports = [
+    rag ? `import { search } from "./rag/pipeline.js";` : "",
+    `import { complete${streaming ? ", completeStream" : ""}, type Msg } from "./llm/client.js";`,
+    toolAgent ? `import { TOOLS } from "./tools.js";` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const ragLines = rag
+    ? `  const contexts: string[] = chunks.map((c) => c.text);\n  const sources: string[] = chunks.map((c) => (c.page ? c.source + " p." + c.page : c.source));\n`
+    : `  const contexts: string[] = [];\n  const sources: string[] = [];\n`;
+  const ragSearch = rag ? `  const chunks = await search(message);\n` : "";
+  const toolLines = toolAgent
+    ? `  // tool-agent: 도구를 최대 ${maxSteps}회 호출해 컨텍스트를 보강. (TODO: 실제 LLM tool-use 로 도구/인자 선택)\n` +
+      `  for (const name of Object.keys(TOOLS).slice(0, ${maxSteps})) {\n` +
+      `    const result = await TOOLS[name]({ query: message });\n` +
+      `    contexts.push("[tool:" + name + "] " + JSON.stringify(result));\n` +
+      `    sources.push("tool:" + name);\n` +
+      `  }\n`
+    : "";
+
+  const sessionDecl = multiTurn
+    ? `\n// 멀티턴 세션 — sessionId 별 대화 이력(메모리). 운영은 DB/Redis 로 대체.\nconst SESSIONS = new Map<string, Msg[]>();\nconst HISTORY_MSGS = ${histMsgs};\nfunction loadHistory(id?: string): Msg[] { return id ? SESSIONS.get(id) ?? [] : []; }\nfunction saveHistory(id: string | undefined, messages: Msg[], answerText: string): void {\n  if (!id) return;\n  const updated: Msg[] = [...messages, { role: "assistant", content: answerText }];\n  SESSIONS.set(id, updated.slice(-HISTORY_MSGS));\n}\n`
+    : `\nfunction loadHistory(_id?: string): Msg[] { return []; }\nfunction saveHistory(_id: string | undefined, _m: Msg[], _a: string): void {}\n`;
+
   const maskUtil = masking
+    ? `\n// 개인정보 마스킹 (piiFilter/masking) — TODO: 기관 정책에 맞게 패턴을 보강한다.\nfunction maskPii(text: string): string {\n  return text\n    .replace(/\\d{6}-\\d{7}/g, "******-*******") // 주민등록번호\n    .replace(/01[016789]-?\\d{3,4}-?\\d{4}/g, "***-****-****") // 휴대전화\n    .replace(/[\\w.+-]+@[\\w-]+\\.[\\w.-]+/g, "***@***"); // 이메일\n}\n`
+    : "";
+
+  const streamFn = streaming
     ? `
-// 개인정보 마스킹 (piiFilter/masking) — TODO: 기관 정책에 맞게 패턴을 보강한다.
-function maskPii(text: string): string {
-  return text
-    .replace(/\\d{6}-\\d{7}/g, "******-*******") // 주민등록번호
-    .replace(/01[016789]-?\\d{3,4}-?\\d{4}/g, "***-****-****") // 휴대전화
-    .replace(/[\\w.+-]+@[\\w-]+\\.[\\w.-]+/g, "***@***"); // 이메일
+// 스트리밍 응답 — 토큰 델타를 순차 yield, 마지막에 sources. (/api/chat/stream 에서 SSE 로 전송)
+export async function* answerStream(message: string, sessionId?: string): AsyncGenerator<{ delta?: string; sources?: string[] }> {
+  const { contexts, sources } = await gather(message);
+  const system = buildSystemPrompt(contexts);
+  const messages: Msg[] = [...loadHistory(sessionId), { role: "user", content: message }];
+  let full = "";
+  if (STUB) {
+    for (const tok of stubAnswer(message, contexts).split(/(\\s+)/)) { full += tok; yield { delta: tok }; }
+  } else {
+    for await (const d of completeStream(system, messages)) { full += d; yield { delta: d }; }
+  }
+  saveHistory(sessionId, messages, ${safe("full")});
+  yield { sources };
 }
 `
     : "";
-  const maskApply = masking ? "  const safe = maskPii(text);\n" : "  const safe = text;\n";
-  const it = spec.interaction;
-  const agentLoopNote =
-    it.agentMode === "tool-agent"
-      ? `// 동작: 도구호출 에이전트 — 추론→도구 호출→관찰을 최대 ${it.maxSteps ?? 5}회 반복(정책: ${it.toolPolicy}).\n//       integrations.tools 를 함수로 등록하고 루프를 구현한다. trace 표시: ${it.rendering.toolCallDisplay}.\n`
-      : `// 동작: ${it.agentMode}.\n`;
-  return `// 채팅 오케스트레이션 골격: (RAG 검색) → LLM 호출.
-${agentLoopNote}// 응답 스트리밍: ${it.streaming.enabled ? `사용(속도 ${it.streaming.speed}, 인디케이터 ${it.streaming.indicator}) — SSE 또는 ReadableStream 으로 토큰 전송` : "미사용"}.
-// 렌더링: 마크다운 ${it.rendering.markdown} · 인용 "${it.rendering.citationStyle}" · 도구호출 "${it.rendering.toolCallDisplay}".
-// 출력: 길이 "${it.output.length}" · 구조 "${it.output.structured}"${it.rendering.showContextMeter ? " · 컨텍스트 사용량 미터 노출" : ""}.
-// 에이전트 능력: ${[
-    spec.agent.askUser && "명확화 질문",
-    spec.agent.subAgents.enabled && "서브에이전트",
-    spec.agent.memory.longTerm && "장기 기억",
-    spec.agent.builtinTools.length && `내장도구(${spec.agent.builtinTools.join("/")})`,
-  ]
-    .filter(Boolean)
-    .join(" · ") || "(없음)"}.
-// 컨텍스트: ${spec.agent.context.autoCompact ? `자동압축 ${spec.agent.context.strategy}${spec.agent.context.budgetTokens ? ` @${spec.agent.context.budgetTokens}tok` : ""}` : "압축 안 함"}.
-// 안전: 거절 "${spec.agent.safety.refusalStyle}"${spec.agent.safety.rateLimitPerMin ? ` · ${spec.agent.safety.rateLimitPerMin}/min` : ""}${spec.agent.safety.abuseFilter ? " · 남용필터" : ""}.
-${ragImport}import { complete } from "./llm/client.js";
+
+  return `// 채팅 오케스트레이션: (RAG 검색)${toolAgent ? " + 도구 호출 루프" : ""} → LLM${streaming ? " (스트리밍)" : ""}.
+// 동작: ${it.agentMode} / 멀티턴: ${multiTurn} / 스트리밍: ${streaming} / 인용: "${it.rendering.citationStyle}".
+// 안전: 거절 "${spec.agent.safety.refusalStyle}"${masking ? " · PII 마스킹" : ""}.
+${imports}
 
 const GROUNDED_ONLY = ${spec.llm.guardrails.groundedOnly}; // 근거 기반 답변 강제
-// 테스트/오프라인 환경: LLM_STUB=true 면 실제 LLM 호출 없이 결정적 스텁 응답을 쓴다.
-const STUB = process.env.LLM_STUB === "true";
+const STUB = process.env.LLM_STUB === "true"; // 테스트/오프라인: 실제 LLM 호출 없이 결정적 스텁
+${sessionDecl}
+export interface ChatResult { answer: string; sources: string[]; }
 
-export async function answer(message: string): Promise<{ answer: string; sources: string[] }> {
-${ragCall}${citationNote}  const system = buildSystemPrompt(contexts);
-  const text = STUB ? stubAnswer(message, contexts) : await complete(system, message);
-${maskApply}  return { answer: safe, sources };
+// 컨텍스트 구성: RAG 검색${toolAgent ? " + 도구 호출" : ""}
+async function gather(message: string): Promise<{ contexts: string[]; sources: string[] }> {
+${ragSearch}${ragLines}${toolLines}  return { contexts, sources };
 }
 
+export async function answer(message: string, sessionId?: string): Promise<ChatResult> {
+  const { contexts, sources } = await gather(message);
+  const system = buildSystemPrompt(contexts);
+  const messages: Msg[] = [...loadHistory(sessionId), { role: "user", content: message }];
+  const raw = STUB ? stubAnswer(message, contexts) : await complete(system, messages);
+  const answerText = ${safe("raw")};
+  saveHistory(sessionId, messages, answerText);
+  return { answer: answerText, sources };
+}
+${streamFn}
 function stubAnswer(message: string, contexts: string[]): string {
-  // 결정적 스텁 — 골든셋 플러밍 테스트용. 실제 동작은 complete() 가 담당한다.
+  // 결정적 스텁 — 골든셋 플러밍용. 실제 동작은 complete()/completeStream() 가 담당한다.
   const cite = contexts.length ? " (참고: " + contexts.join(", ") + ")" : "";
   return '[STUB] "' + message + '" 문의에 대한 안내입니다.' + cite;
 }
@@ -199,11 +255,49 @@ function buildSystemPrompt(contexts: string[]): string {
 `;
 }
 
+// tool-agent 도구 레지스트리 (integrations.tools → 스텁 함수)
+function toolsTs(spec: AgentSpec): string {
+  const tools = spec.integrations.tools.length
+    ? spec.integrations.tools
+    : [{ name: "search_example", description: "예시 도구 — integrations.tools 를 채우세요." }];
+  const entries = tools
+    .map(
+      (t) =>
+        `  // ${t.description}\n  ${JSON.stringify(t.name)}: async (args) => ({ tool: ${JSON.stringify(
+          t.name,
+        )}, args, result: "TODO: 실제 구현" }),`,
+    )
+    .join("\n");
+  return `// 도구 레지스트리 — agentMode=tool-agent. (각 도구의 실제 로직을 채운다)
+export type ToolFn = (args: Record<string, unknown>) => Promise<unknown>;
+
+export const TOOLS: Record<string, ToolFn> = {
+${entries}
+};
+`;
+}
+
 function llmClientTs(spec: AgentSpec): string {
+  const stream = spec.interaction.streaming.enabled;
   if (spec.llm.provider === "claude" && spec.llm.serving === "official-api") {
+    const streamFn = stream
+      ? `
+/** 스트리밍 — 토큰 델타를 순차 yield (streaming.enabled=true) */
+export async function* completeStream(system: string, messages: Msg[]): AsyncGenerator<string> {
+  const s = await client().messages.create({
+    model: MODEL, max_tokens: ${spec.llm.params.maxTokens}, temperature: ${spec.llm.params.temperature},
+    system, messages, stream: true,
+  });
+  for await (const ev of s) {
+    if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") yield ev.delta.text;
+  }
+}
+`
+      : "";
     return `// LLM 클라이언트 — Claude 공식 API. (키: ANTHROPIC_API_KEY)
 import Anthropic from "@anthropic-ai/sdk";
 
+export type Msg = { role: "user" | "assistant"; content: string };
 const MODEL = process.env.LLM_MODEL ?? "${spec.llm.model}";
 
 // 지연 초기화 — 키가 없어도 서버(/health)는 기동되도록 한다.
@@ -213,25 +307,55 @@ function client(): Anthropic {
   return _client;
 }
 
-export async function complete(system: string, user: string): Promise<string> {
+export async function complete(system: string, messages: Msg[]): Promise<string> {
   const res = await client().messages.create({
     model: MODEL,
     max_tokens: ${spec.llm.params.maxTokens},
     temperature: ${spec.llm.params.temperature},
     system,
-    messages: [{ role: "user", content: user }],
+    messages,
   });
   const block = res.content[0];
   return block && block.type === "text" ? block.text : "";
 }
-`;
+${streamFn}`;
   }
   // 프록시/사내추론/오픈소스: OpenAI 호환 엔드포인트 가정
+  const streamFnCompat = stream
+    ? `
+/** 스트리밍 — OpenAI 호환 SSE 파싱 (streaming.enabled=true) */
+export async function* completeStream(system: string, messages: Msg[]): AsyncGenerator<string> {
+  const res = await fetch(\`\${BASE_URL}/chat/completions\`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ model: MODEL, stream: true, messages: [{ role: "system", content: system }, ...messages] }),
+  });
+  const reader = res.body?.getReader();
+  if (!reader) return;
+  const dec = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split("\\n");
+    buf = lines.pop() ?? "";
+    for (const line of lines) {
+      const m = line.trim();
+      if (!m.startsWith("data:")) continue;
+      const payload = m.slice(5).trim();
+      if (payload === "[DONE]") return;
+      try { const j = JSON.parse(payload); const d = j?.choices?.[0]?.delta?.content; if (d) yield d; } catch { /* skip */ }
+    }
+  }
+}
+`
+    : "";
   return `// LLM 클라이언트 — OpenAI 호환 엔드포인트(프록시/사내 추론). (LLM_BASE_URL)
+export type Msg = { role: "user" | "assistant"; content: string };
 const BASE_URL = process.env.LLM_BASE_URL ?? "http://localhost:8000/v1";
 const MODEL = process.env.LLM_MODEL ?? "${spec.llm.model}";
 
-export async function complete(system: string, user: string): Promise<string> {
+export async function complete(system: string, messages: Msg[]): Promise<string> {
   const res = await fetch(\`\${BASE_URL}/chat/completions\`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -239,16 +363,13 @@ export async function complete(system: string, user: string): Promise<string> {
       model: MODEL,
       max_tokens: ${spec.llm.params.maxTokens},
       temperature: ${spec.llm.params.temperature},
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
+      messages: [{ role: "system", content: system }, ...messages],
     }),
   });
   const data = await res.json();
   return data?.choices?.[0]?.message?.content ?? "";
 }
-`;
+${streamFnCompat}`;
 }
 
 function ragPipelineTs(spec: AgentSpec): string {
@@ -338,20 +459,49 @@ function chatUiHtml(spec: AgentSpec): string {
 `;
 }
 
-const CHAT_UI_JS = `// 최소 채팅 UI — /api/chat 호출. (PROMPT.md 지시로 디자인/접근성을 다듬는다)
-const form = document.getElementById("form");
-const log = document.getElementById("log");
-const input = document.getElementById("msg");
-
-function add(role, text) {
-  const el = document.createElement("div");
-  el.className = "bubble bubble--" + role;
-  el.textContent = text;
-  log.appendChild(el);
-  log.scrollTop = log.scrollHeight;
-}
-
-form.addEventListener("submit", async (e) => {
+function chatUiJs(spec: AgentSpec): string {
+  const streaming = spec.interaction.streaming.enabled;
+  const session = spec.llm.session.multiTurn
+    ? `const SESSION_ID = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now());\n`
+    : `const SESSION_ID = undefined;\n`;
+  const handler = streaming
+    ? `form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const message = input.value.trim();
+  if (!message) return;
+  add("user", message);
+  input.value = "";
+  const bot = add("bot", "");
+  try {
+    const res = await fetch("/api/chat/stream", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message, sessionId: SESSION_ID }),
+    });
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const parts = buf.split("\\n\\n");
+      buf = parts.pop() || "";
+      for (const p of parts) {
+        const line = p.split("\\n").find((l) => l.startsWith("data:"));
+        if (!line) continue;
+        try {
+          const ev = JSON.parse(line.slice(5).trim());
+          if (ev.delta) bot.textContent += ev.delta;
+        } catch (_) { /* skip */ }
+      }
+      log.scrollTop = log.scrollHeight;
+    }
+  } catch (_) {
+    bot.textContent = "오류가 발생했습니다.";
+  }
+});`
+    : `form.addEventListener("submit", async (e) => {
   e.preventDefault();
   const message = input.value.trim();
   if (!message) return;
@@ -361,15 +511,31 @@ form.addEventListener("submit", async (e) => {
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, sessionId: SESSION_ID }),
     });
     const data = await res.json();
     add("bot", data.answer ?? "(응답 없음)");
-  } catch {
+  } catch (_) {
     add("bot", "오류가 발생했습니다.");
   }
-});
+});`;
+  return `// 최소 채팅 UI — ${streaming ? "/api/chat/stream (SSE 스트리밍)" : "/api/chat"} 호출. (PROMPT.md 지시로 디자인/접근성을 다듬는다)
+${session}const form = document.getElementById("form");
+const log = document.getElementById("log");
+const input = document.getElementById("msg");
+
+function add(role, text) {
+  const el = document.createElement("div");
+  el.className = "bubble bubble--" + role;
+  el.textContent = text;
+  log.appendChild(el);
+  log.scrollTop = log.scrollHeight;
+  return el;
+}
+
+${handler}
 `;
+}
 
 function stylesCss(spec: AgentSpec): string {
   // 레이아웃(design.layout)을 컨테이너 CSS 로 반영한다.
@@ -479,7 +645,7 @@ export function generateScaffold(spec: AgentSpec, slug: string): GeneratedFile[]
     { path: "src/chat.ts", contents: chatTs(spec) },
     { path: "src/llm/client.ts", contents: llmClientTs(spec) },
     { path: "public/index.html", contents: chatUiHtml(spec) },
-    { path: "public/app.js", contents: CHAT_UI_JS },
+    { path: "public/app.js", contents: chatUiJs(spec) },
     { path: "public/styles.css", contents: stylesCss(spec) },
     { path: "tests/golden.test.ts", contents: goldenTest(spec) },
     { path: ".env.example", contents: envEntries(spec).join("\n") + "\n" },
@@ -487,6 +653,9 @@ export function generateScaffold(spec: AgentSpec, slug: string): GeneratedFile[]
   ];
   if (spec.rag.enabled) {
     files.push({ path: "src/rag/pipeline.ts", contents: ragPipelineTs(spec) });
+  }
+  if (spec.interaction.agentMode === "tool-agent") {
+    files.push({ path: "src/tools.ts", contents: toolsTs(spec) });
   }
   if (spec.backend.deploy === "docker" || spec.backend.deploy === "kubernetes") {
     files.push({ path: "Dockerfile", contents: dockerfile() });

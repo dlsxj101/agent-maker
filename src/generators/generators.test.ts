@@ -13,7 +13,7 @@ import {
   bundleToZipBytes,
   type GeneratedFile,
 } from "./index";
-import { cloudSpec, airgapSpec, FIXED_NOW } from "./fixtures";
+import { cloudSpec, airgapSpec, toolAgentSpec, FIXED_NOW } from "./fixtures";
 
 function fileMap(files: GeneratedFile[]): Record<string, string> {
   return Object.fromEntries(files.map((f) => [f.path, f.contents]));
@@ -52,6 +52,21 @@ describe("generateArtifacts — 파일 구성", () => {
     const paths = generateArtifacts(noRag, { now: FIXED_NOW }).map((f) => f.path);
     expect(paths).not.toContain("src/rag/pipeline.ts");
   });
+
+  it("tool-agent 는 tools.ts + 도구 루프를 생성한다", () => {
+    const m = fileMap(generateArtifacts(toolAgentSpec, { now: FIXED_NOW }));
+    expect(m["src/tools.ts"]).toContain("search_minwon");
+    expect(m["src/chat.ts"]).toContain("Object.keys(TOOLS)");
+    expect(m["src/tools.ts"]).toContain("export const TOOLS");
+  });
+
+  it("멀티턴+스트리밍이면 세션 스토어 + SSE 엔드포인트 + answerStream 을 생성한다", () => {
+    const m = fileMap(generateArtifacts(cloudSpec, { now: FIXED_NOW }));
+    expect(m["src/chat.ts"]).toContain("SESSIONS");
+    expect(m["src/chat.ts"]).toContain("answerStream");
+    expect(m["src/server.ts"]).toContain("/api/chat/stream");
+    expect(m["src/llm/client.ts"]).toContain("completeStream");
+  });
 });
 
 describe("결정성", () => {
@@ -88,7 +103,7 @@ describe("공공기관 제약 반영 (제품 핵심 보장)", () => {
     };
     const m = fileMap(generateArtifacts(agent, { now: FIXED_NOW }));
     expect(m["PROMPT.md"]).toContain("도구호출 에이전트");
-    expect(m["src/chat.ts"]).toContain("도구호출 에이전트");
+    expect(m["src/chat.ts"]).toContain("도구 호출 루프");
   });
 
   it("에이전트 능력(서브에이전트·내장도구·자동압축)이 PROMPT 에 반영된다", () => {

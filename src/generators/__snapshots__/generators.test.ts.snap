@@ -491,7 +491,8 @@ OO부 정보화담당관 챗봇 프로젝트.
   }
 }
 ",
-  "public/app.js": "// 최소 채팅 UI — /api/chat 호출. (PROMPT.md 지시로 디자인/접근성을 다듬는다)
+  "public/app.js": "// 최소 채팅 UI — /api/chat/stream (SSE 스트리밍) 호출. (PROMPT.md 지시로 디자인/접근성을 다듬는다)
+const SESSION_ID = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now());
 const form = document.getElementById("form");
 const log = document.getElementById("log");
 const input = document.getElementById("msg");
@@ -502,6 +503,7 @@ function add(role, text) {
   el.textContent = text;
   log.appendChild(el);
   log.scrollTop = log.scrollHeight;
+  return el;
 }
 
 form.addEventListener("submit", async (e) => {
@@ -510,16 +512,34 @@ form.addEventListener("submit", async (e) => {
   if (!message) return;
   add("user", message);
   input.value = "";
+  const bot = add("bot", "");
   try {
-    const res = await fetch("/api/chat", {
+    const res = await fetch("/api/chat/stream", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, sessionId: SESSION_ID }),
     });
-    const data = await res.json();
-    add("bot", data.answer ?? "(응답 없음)");
-  } catch {
-    add("bot", "오류가 발생했습니다.");
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const parts = buf.split("\\n\\n");
+      buf = parts.pop() || "";
+      for (const p of parts) {
+        const line = p.split("\\n").find((l) => l.startsWith("data:"));
+        if (!line) continue;
+        try {
+          const ev = JSON.parse(line.slice(5).trim());
+          if (ev.delta) bot.textContent += ev.delta;
+        } catch (_) { /* skip */ }
+      }
+      log.scrollTop = log.scrollHeight;
+    }
+  } catch (_) {
+    bot.textContent = "오류가 발생했습니다.";
   }
 });
 ",
@@ -576,34 +596,62 @@ body { margin: 0; font-family: var(--font-body); color: var(--color-text); backg
 .chat__send { padding: 10px 16px; border: none; border-radius: 8px; background: var(--color-accent); color: #fff; cursor: pointer; }
 .chat__send:focus-visible, .chat__input:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 ",
-  "src/chat.ts": "// 채팅 오케스트레이션 골격: (RAG 검색) → LLM 호출.
-// 동작: rag-cited.
-// 응답 스트리밍: 사용(속도 normal, 인디케이터 dots) — SSE 또는 ReadableStream 으로 토큰 전송.
-// 렌더링: 마크다운 true · 인용 "chips" · 도구호출 "collapsed".
-// 출력: 길이 "balanced" · 구조 "none".
-// 에이전트 능력: (없음).
-// 컨텍스트: 압축 안 함.
-// 안전: 거절 "polite".
+  "src/chat.ts": "// 채팅 오케스트레이션: (RAG 검색) → LLM (스트리밍).
+// 동작: rag-cited / 멀티턴: true / 스트리밍: true / 인용: "chips".
+// 안전: 거절 "polite" · PII 마스킹.
 import { search } from "./rag/pipeline.js";
-import { complete } from "./llm/client.js";
+import { complete, completeStream, type Msg } from "./llm/client.js";
 
 const GROUNDED_ONLY = true; // 근거 기반 답변 강제
-// 테스트/오프라인 환경: LLM_STUB=true 면 실제 LLM 호출 없이 결정적 스텁 응답을 쓴다.
-const STUB = process.env.LLM_STUB === "true";
+const STUB = process.env.LLM_STUB === "true"; // 테스트/오프라인: 실제 LLM 호출 없이 결정적 스텁
 
-export async function answer(message: string): Promise<{ answer: string; sources: string[] }> {
+// 멀티턴 세션 — sessionId 별 대화 이력(메모리). 운영은 DB/Redis 로 대체.
+const SESSIONS = new Map<string, Msg[]>();
+const HISTORY_MSGS = 20;
+function loadHistory(id?: string): Msg[] { return id ? SESSIONS.get(id) ?? [] : []; }
+function saveHistory(id: string | undefined, messages: Msg[], answerText: string): void {
+  if (!id) return;
+  const updated: Msg[] = [...messages, { role: "assistant", content: answerText }];
+  SESSIONS.set(id, updated.slice(-HISTORY_MSGS));
+}
+
+export interface ChatResult { answer: string; sources: string[]; }
+
+// 컨텍스트 구성: RAG 검색
+async function gather(message: string): Promise<{ contexts: string[]; sources: string[] }> {
   const chunks = await search(message);
-  const contexts = chunks.map((c) => c.text);
-  const sources = chunks.map((c) => (c.page ? c.source + " p." + c.page : c.source));
-  // 출처 표기(citations=true): sources 를 답변과 함께 노출한다.
+  const contexts: string[] = chunks.map((c) => c.text);
+  const sources: string[] = chunks.map((c) => (c.page ? c.source + " p." + c.page : c.source));
+  return { contexts, sources };
+}
+
+export async function answer(message: string, sessionId?: string): Promise<ChatResult> {
+  const { contexts, sources } = await gather(message);
   const system = buildSystemPrompt(contexts);
-  const text = STUB ? stubAnswer(message, contexts) : await complete(system, message);
-  const safe = maskPii(text);
-  return { answer: safe, sources };
+  const messages: Msg[] = [...loadHistory(sessionId), { role: "user", content: message }];
+  const raw = STUB ? stubAnswer(message, contexts) : await complete(system, messages);
+  const answerText = maskPii(raw);
+  saveHistory(sessionId, messages, answerText);
+  return { answer: answerText, sources };
+}
+
+// 스트리밍 응답 — 토큰 델타를 순차 yield, 마지막에 sources. (/api/chat/stream 에서 SSE 로 전송)
+export async function* answerStream(message: string, sessionId?: string): AsyncGenerator<{ delta?: string; sources?: string[] }> {
+  const { contexts, sources } = await gather(message);
+  const system = buildSystemPrompt(contexts);
+  const messages: Msg[] = [...loadHistory(sessionId), { role: "user", content: message }];
+  let full = "";
+  if (STUB) {
+    for (const tok of stubAnswer(message, contexts).split(/(\\s+)/)) { full += tok; yield { delta: tok }; }
+  } else {
+    for await (const d of completeStream(system, messages)) { full += d; yield { delta: d }; }
+  }
+  saveHistory(sessionId, messages, maskPii(full));
+  yield { sources };
 }
 
 function stubAnswer(message: string, contexts: string[]): string {
-  // 결정적 스텁 — 골든셋 플러밍 테스트용. 실제 동작은 complete() 가 담당한다.
+  // 결정적 스텁 — 골든셋 플러밍용. 실제 동작은 complete()/completeStream() 가 담당한다.
   const cite = contexts.length ? " (참고: " + contexts.join(", ") + ")" : "";
   return '[STUB] "' + message + '" 문의에 대한 안내입니다.' + cite;
 }
@@ -629,10 +677,11 @@ function buildSystemPrompt(contexts: string[]): string {
 }
 ",
   "src/llm/client.ts": "// LLM 클라이언트 — OpenAI 호환 엔드포인트(프록시/사내 추론). (LLM_BASE_URL)
+export type Msg = { role: "user" | "assistant"; content: string };
 const BASE_URL = process.env.LLM_BASE_URL ?? "http://localhost:8000/v1";
 const MODEL = process.env.LLM_MODEL ?? "exaone-3.5";
 
-export async function complete(system: string, user: string): Promise<string> {
+export async function complete(system: string, messages: Msg[]): Promise<string> {
   const res = await fetch(\`\${BASE_URL}/chat/completions\`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -640,14 +689,37 @@ export async function complete(system: string, user: string): Promise<string> {
       model: MODEL,
       max_tokens: 2048,
       temperature: 0.3,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
+      messages: [{ role: "system", content: system }, ...messages],
     }),
   });
   const data = await res.json();
   return data?.choices?.[0]?.message?.content ?? "";
+}
+
+/** 스트리밍 — OpenAI 호환 SSE 파싱 (streaming.enabled=true) */
+export async function* completeStream(system: string, messages: Msg[]): AsyncGenerator<string> {
+  const res = await fetch(\`\${BASE_URL}/chat/completions\`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ model: MODEL, stream: true, messages: [{ role: "system", content: system }, ...messages] }),
+  });
+  const reader = res.body?.getReader();
+  if (!reader) return;
+  const dec = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split("\\n");
+    buf = lines.pop() ?? "";
+    for (const line of lines) {
+      const m = line.trim();
+      if (!m.startsWith("data:")) continue;
+      const payload = m.slice(5).trim();
+      if (payload === "[DONE]") return;
+      try { const j = JSON.parse(payload); const d = j?.choices?.[0]?.delta?.content; if (d) yield d; } catch { /* skip */ }
+    }
+  }
 }
 ",
   "src/rag/pipeline.ts": "// RAG 파이프라인 골격 — 적재→청킹→임베딩→검색. (실서비스 로직은 PROMPT.md 지시로 채움)
@@ -698,7 +770,7 @@ export async function search(query: string, topK = 3): Promise<Chunk[]> {
 ",
   "src/server.ts": "// 진입점 — 헬스체크 + 채팅 API 골격. (PROMPT.md 지시에 따라 로직을 채운다)
 import express from "express";
-import { answer } from "./chat.js";
+import { answer, answerStream } from "./chat.js";
 
 const app = express();
 app.use(express.json());
@@ -715,17 +787,38 @@ app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 // 채팅: 사용자 질문 → (RAG 검색) → LLM 답변
 app.post("/api/chat", async (req, res) => {
-  const { message } = req.body ?? {};
+  const { message, sessionId } = req.body ?? {};
   if (typeof message !== "string" || !message.trim()) {
     res.status(400).json({ error: "message 가 필요합니다." });
     return;
   }
   try {
-    const result = await answer(message);
+    const result = await answer(message, sessionId);
     res.json(result);
   } catch {
     res.status(500).json({ error: "처리 중 오류가 발생했습니다." });
   }
+});
+
+// 스트리밍 채팅 (SSE) — interaction.streaming.enabled=true
+app.post("/api/chat/stream", async (req, res) => {
+  const { message, sessionId } = req.body ?? {};
+  if (typeof message !== "string" || !message.trim()) {
+    res.status(400).json({ error: "message 가 필요합니다." });
+    return;
+  }
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  try {
+    for await (const ev of answerStream(message, sessionId)) {
+      res.write(\`data: \${JSON.stringify(ev)}\\n\\n\`);
+    }
+  } catch {
+    res.write('event: error\\ndata: {}\\n\\n');
+  }
+  res.write('event: done\\ndata: {}\\n\\n');
+  res.end();
 });
 
 const port = Number(process.env.PORT ?? 3000);
@@ -1267,7 +1360,8 @@ OO광역시 민원봉사과 챗봇 프로젝트.
   }
 }
 ",
-  "public/app.js": "// 최소 채팅 UI — /api/chat 호출. (PROMPT.md 지시로 디자인/접근성을 다듬는다)
+  "public/app.js": "// 최소 채팅 UI — /api/chat/stream (SSE 스트리밍) 호출. (PROMPT.md 지시로 디자인/접근성을 다듬는다)
+const SESSION_ID = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now());
 const form = document.getElementById("form");
 const log = document.getElementById("log");
 const input = document.getElementById("msg");
@@ -1278,6 +1372,7 @@ function add(role, text) {
   el.textContent = text;
   log.appendChild(el);
   log.scrollTop = log.scrollHeight;
+  return el;
 }
 
 form.addEventListener("submit", async (e) => {
@@ -1286,16 +1381,34 @@ form.addEventListener("submit", async (e) => {
   if (!message) return;
   add("user", message);
   input.value = "";
+  const bot = add("bot", "");
   try {
-    const res = await fetch("/api/chat", {
+    const res = await fetch("/api/chat/stream", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, sessionId: SESSION_ID }),
     });
-    const data = await res.json();
-    add("bot", data.answer ?? "(응답 없음)");
-  } catch {
-    add("bot", "오류가 발생했습니다.");
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const parts = buf.split("\\n\\n");
+      buf = parts.pop() || "";
+      for (const p of parts) {
+        const line = p.split("\\n").find((l) => l.startsWith("data:"));
+        if (!line) continue;
+        try {
+          const ev = JSON.parse(line.slice(5).trim());
+          if (ev.delta) bot.textContent += ev.delta;
+        } catch (_) { /* skip */ }
+      }
+      log.scrollTop = log.scrollHeight;
+    }
+  } catch (_) {
+    bot.textContent = "오류가 발생했습니다.";
   }
 });
 ",
@@ -1352,34 +1465,62 @@ body { margin: 0; font-family: var(--font-body); color: var(--color-text); backg
 .chat__send { padding: 10px 16px; border: none; border-radius: 8px; background: var(--color-accent); color: #fff; cursor: pointer; }
 .chat__send:focus-visible, .chat__input:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 ",
-  "src/chat.ts": "// 채팅 오케스트레이션 골격: (RAG 검색) → LLM 호출.
-// 동작: rag-cited.
-// 응답 스트리밍: 사용(속도 normal, 인디케이터 dots) — SSE 또는 ReadableStream 으로 토큰 전송.
-// 렌더링: 마크다운 true · 인용 "chips" · 도구호출 "collapsed".
-// 출력: 길이 "balanced" · 구조 "none".
-// 에이전트 능력: (없음).
-// 컨텍스트: 압축 안 함.
-// 안전: 거절 "polite".
+  "src/chat.ts": "// 채팅 오케스트레이션: (RAG 검색) → LLM (스트리밍).
+// 동작: rag-cited / 멀티턴: true / 스트리밍: true / 인용: "chips".
+// 안전: 거절 "polite" · PII 마스킹.
 import { search } from "./rag/pipeline.js";
-import { complete } from "./llm/client.js";
+import { complete, completeStream, type Msg } from "./llm/client.js";
 
 const GROUNDED_ONLY = true; // 근거 기반 답변 강제
-// 테스트/오프라인 환경: LLM_STUB=true 면 실제 LLM 호출 없이 결정적 스텁 응답을 쓴다.
-const STUB = process.env.LLM_STUB === "true";
+const STUB = process.env.LLM_STUB === "true"; // 테스트/오프라인: 실제 LLM 호출 없이 결정적 스텁
 
-export async function answer(message: string): Promise<{ answer: string; sources: string[] }> {
+// 멀티턴 세션 — sessionId 별 대화 이력(메모리). 운영은 DB/Redis 로 대체.
+const SESSIONS = new Map<string, Msg[]>();
+const HISTORY_MSGS = 20;
+function loadHistory(id?: string): Msg[] { return id ? SESSIONS.get(id) ?? [] : []; }
+function saveHistory(id: string | undefined, messages: Msg[], answerText: string): void {
+  if (!id) return;
+  const updated: Msg[] = [...messages, { role: "assistant", content: answerText }];
+  SESSIONS.set(id, updated.slice(-HISTORY_MSGS));
+}
+
+export interface ChatResult { answer: string; sources: string[]; }
+
+// 컨텍스트 구성: RAG 검색
+async function gather(message: string): Promise<{ contexts: string[]; sources: string[] }> {
   const chunks = await search(message);
-  const contexts = chunks.map((c) => c.text);
-  const sources = chunks.map((c) => (c.page ? c.source + " p." + c.page : c.source));
-  // 출처 표기(citations=true): sources 를 답변과 함께 노출한다.
+  const contexts: string[] = chunks.map((c) => c.text);
+  const sources: string[] = chunks.map((c) => (c.page ? c.source + " p." + c.page : c.source));
+  return { contexts, sources };
+}
+
+export async function answer(message: string, sessionId?: string): Promise<ChatResult> {
+  const { contexts, sources } = await gather(message);
   const system = buildSystemPrompt(contexts);
-  const text = STUB ? stubAnswer(message, contexts) : await complete(system, message);
-  const safe = maskPii(text);
-  return { answer: safe, sources };
+  const messages: Msg[] = [...loadHistory(sessionId), { role: "user", content: message }];
+  const raw = STUB ? stubAnswer(message, contexts) : await complete(system, messages);
+  const answerText = maskPii(raw);
+  saveHistory(sessionId, messages, answerText);
+  return { answer: answerText, sources };
+}
+
+// 스트리밍 응답 — 토큰 델타를 순차 yield, 마지막에 sources. (/api/chat/stream 에서 SSE 로 전송)
+export async function* answerStream(message: string, sessionId?: string): AsyncGenerator<{ delta?: string; sources?: string[] }> {
+  const { contexts, sources } = await gather(message);
+  const system = buildSystemPrompt(contexts);
+  const messages: Msg[] = [...loadHistory(sessionId), { role: "user", content: message }];
+  let full = "";
+  if (STUB) {
+    for (const tok of stubAnswer(message, contexts).split(/(\\s+)/)) { full += tok; yield { delta: tok }; }
+  } else {
+    for await (const d of completeStream(system, messages)) { full += d; yield { delta: d }; }
+  }
+  saveHistory(sessionId, messages, maskPii(full));
+  yield { sources };
 }
 
 function stubAnswer(message: string, contexts: string[]): string {
-  // 결정적 스텁 — 골든셋 플러밍 테스트용. 실제 동작은 complete() 가 담당한다.
+  // 결정적 스텁 — 골든셋 플러밍용. 실제 동작은 complete()/completeStream() 가 담당한다.
   const cite = contexts.length ? " (참고: " + contexts.join(", ") + ")" : "";
   return '[STUB] "' + message + '" 문의에 대한 안내입니다.' + cite;
 }
@@ -1407,6 +1548,7 @@ function buildSystemPrompt(contexts: string[]): string {
   "src/llm/client.ts": "// LLM 클라이언트 — Claude 공식 API. (키: ANTHROPIC_API_KEY)
 import Anthropic from "@anthropic-ai/sdk";
 
+export type Msg = { role: "user" | "assistant"; content: string };
 const MODEL = process.env.LLM_MODEL ?? "claude-sonnet-4-6";
 
 // 지연 초기화 — 키가 없어도 서버(/health)는 기동되도록 한다.
@@ -1416,16 +1558,27 @@ function client(): Anthropic {
   return _client;
 }
 
-export async function complete(system: string, user: string): Promise<string> {
+export async function complete(system: string, messages: Msg[]): Promise<string> {
   const res = await client().messages.create({
     model: MODEL,
     max_tokens: 2048,
     temperature: 0.3,
     system,
-    messages: [{ role: "user", content: user }],
+    messages,
   });
   const block = res.content[0];
   return block && block.type === "text" ? block.text : "";
+}
+
+/** 스트리밍 — 토큰 델타를 순차 yield (streaming.enabled=true) */
+export async function* completeStream(system: string, messages: Msg[]): AsyncGenerator<string> {
+  const s = await client().messages.create({
+    model: MODEL, max_tokens: 2048, temperature: 0.3,
+    system, messages, stream: true,
+  });
+  for await (const ev of s) {
+    if (ev.type === "content_block_delta" && ev.delta.type === "text_delta") yield ev.delta.text;
+  }
 }
 ",
   "src/rag/pipeline.ts": "// RAG 파이프라인 골격 — 적재→청킹→임베딩→검색. (실서비스 로직은 PROMPT.md 지시로 채움)
@@ -1476,7 +1629,7 @@ export async function search(query: string, topK = 3): Promise<Chunk[]> {
 ",
   "src/server.ts": "// 진입점 — 헬스체크 + 채팅 API 골격. (PROMPT.md 지시에 따라 로직을 채운다)
 import express from "express";
-import { answer } from "./chat.js";
+import { answer, answerStream } from "./chat.js";
 
 const app = express();
 app.use(express.json());
@@ -1493,17 +1646,38 @@ app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 // 채팅: 사용자 질문 → (RAG 검색) → LLM 답변
 app.post("/api/chat", async (req, res) => {
-  const { message } = req.body ?? {};
+  const { message, sessionId } = req.body ?? {};
   if (typeof message !== "string" || !message.trim()) {
     res.status(400).json({ error: "message 가 필요합니다." });
     return;
   }
   try {
-    const result = await answer(message);
+    const result = await answer(message, sessionId);
     res.json(result);
   } catch {
     res.status(500).json({ error: "처리 중 오류가 발생했습니다." });
   }
+});
+
+// 스트리밍 채팅 (SSE) — interaction.streaming.enabled=true
+app.post("/api/chat/stream", async (req, res) => {
+  const { message, sessionId } = req.body ?? {};
+  if (typeof message !== "string" || !message.trim()) {
+    res.status(400).json({ error: "message 가 필요합니다." });
+    return;
+  }
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  try {
+    for await (const ev of answerStream(message, sessionId)) {
+      res.write(\`data: \${JSON.stringify(ev)}\\n\\n\`);
+    }
+  } catch {
+    res.write('event: error\\ndata: {}\\n\\n');
+  }
+  res.write('event: done\\ndata: {}\\n\\n');
+  res.end();
 });
 
 const port = Number(process.env.PORT ?? 3000);
