@@ -115,5 +115,19 @@ export const toolAgentSpec: AgentSpec = createDraftSpec({
   },
 });
 
+/** 폐쇄망 + 음성(온프레미스) + 문서 접근제어 + 본인확인 프로필 (제약 조합) */
+export const voiceSpec: AgentSpec = createDraftSpec({
+  project: { org: "OO청", name: "내부 음성 안내봇", deployEnv: "on-premise-airgap" },
+  backend: { network: "offline" },
+  llm: { provider: "opensource", model: "exaone-3.5", serving: "self-hosted" },
+  frontend: { userAuth: "gov-pki" },
+  rag: { enabled: true, vectorDb: "qdrant", embedding: "bge-m3", accessControl: "department" },
+  interaction: {
+    multimodal: ["voice-input", "voice-output"],
+    voice: { stt: "whisper-local", tts: "coqui-local" },
+  },
+  evaluation: { testset: [{ question: "규정 조회 방법?", expectedSource: "내부규정.pdf" }] },
+});
+
 /** 결정성 테스트용 고정 시각 */
 export const FIXED_NOW = new Date("2026-06-20T00:00:00.000Z");

@@ -13,7 +13,8 @@ import {
   bundleToZipBytes,
   type GeneratedFile,
 } from "./index";
-import { cloudSpec, airgapSpec, toolAgentSpec, FIXED_NOW } from "./fixtures";
+import { cloudSpec, airgapSpec, toolAgentSpec, voiceSpec, FIXED_NOW } from "./fixtures";
+import { detectConflicts } from "@/lib/conflicts";
 
 function fileMap(files: GeneratedFile[]): Record<string, string> {
   return Object.fromEntries(files.map((f) => [f.path, f.contents]));
@@ -69,6 +70,13 @@ describe("generateArtifacts — 파일 구성", () => {
     expect(m["src/server.ts"]).toContain("RATE_PER_MIN");
     expect(m["src/server.ts"]).toContain("isAbusive");
     expect(m["src/server.ts"]).toContain("너무 깁니다");
+  });
+
+  it("폐쇄망 음성+접근제어 프로필: PROMPT 반영 + 온프레미스 음성 충돌 없음", () => {
+    const m = fileMap(generateArtifacts(voiceSpec, { now: FIXED_NOW }));
+    expect(m["PROMPT.md"]).toContain("음성");
+    expect(m["PROMPT.md"]).toContain("접근 제어");
+    expect(detectConflicts(voiceSpec).map((c) => c.id)).not.toContain("C16");
   });
 
   it("멀티턴+스트리밍이면 세션 스토어 + SSE 엔드포인트 + answerStream 을 생성한다", () => {
