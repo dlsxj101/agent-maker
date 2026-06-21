@@ -160,6 +160,63 @@ describe("스택별 디스패치 (M7-D 풀 패리티)", () => {
   });
 });
 
+describe("스택별 프레임워크 변형 (M7-D 후속)", () => {
+  const mk = (runtime: AgentSpec["backend"]["runtime"], framework: string): AgentSpec => ({
+    ...toolAgentSpec,
+    backend: { ...toolAgentSpec.backend, runtime, framework },
+  });
+
+  it("python/flask → app.py(Flask), main.py 없음", () => {
+    const m = fileMap(generateArtifacts(mk("python", "flask"), { now: FIXED_NOW }));
+    expect(m["app.py"]).toContain("Flask(");
+    expect(Object.keys(m)).not.toContain("main.py");
+    expect(m["requirements.txt"]).toContain("flask");
+  });
+
+  it("python/django → manage.py + config/settings.py + views.py", () => {
+    const m = fileMap(generateArtifacts(mk("python", "django"), { now: FIXED_NOW }));
+    for (const p of ["manage.py", "config/settings.py", "config/urls.py", "views.py"])
+      expect(Object.keys(m)).toContain(p);
+    expect(m["requirements.txt"]).toContain("django");
+  });
+
+  it("python 기본(미지정) → FastAPI main.py", () => {
+    const m = fileMap(generateArtifacts(mk("python", ""), { now: FIXED_NOW }));
+    expect(m["main.py"]).toContain("FastAPI");
+  });
+
+  it("node/fastify → fastify 서버, @types/express 없음", () => {
+    const m = fileMap(generateArtifacts(mk("node", "fastify"), { now: FIXED_NOW }));
+    expect(m["src/server.ts"]).toContain("fastify");
+    expect(m["package.json"]).toContain('"fastify"');
+    expect(m["package.json"]).not.toContain("@types/express");
+  });
+
+  it("node/nestjs → main.ts + app.module.ts + chat.controller.ts (server.ts 없음)", () => {
+    const m = fileMap(generateArtifacts(mk("node", "nestjs"), { now: FIXED_NOW }));
+    for (const p of ["src/main.ts", "src/app.module.ts", "src/chat.controller.ts"])
+      expect(Object.keys(m)).toContain(p);
+    expect(Object.keys(m)).not.toContain("src/server.ts");
+    expect(m["package.json"]).toContain("@nestjs/core");
+    expect(m["tsconfig.json"]).toContain("experimentalDecorators");
+  });
+
+  it("go/gin·echo → go.mod 에 모듈 require, main.go 가 프레임워크 사용", () => {
+    const gin = fileMap(generateArtifacts(mk("go", "gin"), { now: FIXED_NOW }));
+    expect(gin["go.mod"]).toContain("gin-gonic/gin");
+    expect(gin["main.go"]).toContain("gin.Default()");
+    const echo = fileMap(generateArtifacts(mk("go", "echo"), { now: FIXED_NOW }));
+    expect(echo["go.mod"]).toContain("labstack/echo");
+    expect(echo["main.go"]).toContain("echo.New()");
+  });
+
+  it("go 기본(미지정) → 표준 라이브러리 net/http (외부 require 없음)", () => {
+    const m = fileMap(generateArtifacts(mk("go", ""), { now: FIXED_NOW }));
+    expect(m["main.go"]).toContain("net/http");
+    expect(m["go.mod"]).not.toContain("require");
+  });
+});
+
 describe("결정성", () => {
   it("동일 spec + 동일 now → 완전히 동일한 산출", () => {
     const a = generateArtifacts(cloudSpec, { now: FIXED_NOW });

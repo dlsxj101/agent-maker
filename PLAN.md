@@ -399,7 +399,12 @@ AgentSpec {
   - 📌 **현재 깊이 갭(정직)**: full = Node/Python(서버·chat·rag·스트리밍·tool-use 풀). 부분 = **Java 스트리밍·Go/Java tool-use 루프는 단발 complete 위임 골격**(server/chat/rag/guards/masking/multiturn 은 풀). Go 스트리밍은 풀(실 SSE 파싱). → 차기에 Go/Java tool-use·Java 스트리밍 심화.
   - ✅ **깊이 갭 해소(2026-06-21 후속)**: **Go/Java tool-use 루프**(Claude `tool_use` 왕복 / OpenAI `tool_calls` function-calling)·**Java 스트리밍**(java.net.http `ofLines` SSE 파싱, Claude/OpenAI)을 풀 구현. 위임 골격 제거. 검증: Go `build+vet+test`·Java `mvn test`(claude+openai 경로 각각) 통과. → **전 스택(Node/Python/Go/Java) tool-use·스트리밍 풀 패리티 달성.**
   - ✅ **M7-C 산출물 다국어(docLang)**: `project.docLang`(ko/en, 기본 ko) 신설. `src/generators/i18n.ts`(ko/en 문자열 테이블 `t(lang)`) + `format.ts` 영문 라벨(`LABELS_EN`, `label/labelList/yesno` 가 `lang` 인자) + `docs.ts` 5개 문서 언어 분기 + ProjectStep UI 토글. 기본 ko라 **기존 ko 스냅샷 산문 무변동**(agent-spec.json 에 docLang 필드만 추가) + en 스냅샷 신규. 65 테스트·tsc·lint 통과.
-  - 🏁 **M7 완료**: B/0/A/D/C 전부 반영 + 깊이 갭 해소(전 스택 tool-use·스트리밍 풀 패리티). 남은 항목(마법사 UI 라벨 다국어)은 백로그.
+  - ✅ **스택별 프레임워크 변형(2026-06-21 후속)**: 런타임 내 프레임워크 하위 선택까지 코드 분기. 비즈니스 로직은
+    공유, **서버 진입점+매니페스트만** 프레임워크별로 생성. Python: FastAPI(기본)·**Flask**·**Django**. Node:
+    Express(기본)·**Fastify**·**NestJS**. Go: net/http(기본)·**Gin**·**Echo**. Java: Spring Boot(카탈로그 단일).
+    검증: Python `py_compile`(3종)·Node `tsc`(fastify/nestjs 실제 의존성 설치)·Go `go mod tidy`+`vet`+`test`(gin/echo).
+    기본 프레임워크 출력은 바이트 동일(스냅샷 무변동). 단위 테스트 +7(총 72).
+  - 🏁 **M7 완료**: B/0/A/D/C + 깊이 갭 해소(전 스택 tool-use·스트리밍 풀) + 프레임워크 변형(런타임×프레임워크). 남은 항목(마법사 UI 라벨 다국어)은 백로그.
 
 > **검증 루프 요약** (제품의 본질이므로 로드맵에 명시):
 > - 자동: 골든 산출물 스냅샷 테스트 · `AgentSpec` round-trip · 충돌 규칙 단위 테스트

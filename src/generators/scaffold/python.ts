@@ -1,9 +1,9 @@
 /**
  * Python 백엔드 스캐폴드 (풀 패리티). (PLAN.md M7-D)
  *
- * 대표 프레임워크 = FastAPI. Node 참조 구현과 동일한 REST 계약(/health, /api/chat[, /stream, /confirm])과
- * 동일 깊이(멀티턴 세션·SSE 스트리밍·tool-use 루프·RAG 골격·가드/안전·PII 마스킹)를 생성한다.
- * 프레임워크 세부 선택(django/flask)은 requirements/주석에 반영하고 골격은 FastAPI 기준이다.
+ * 프레임워크 분기(backend.framework): **FastAPI(기본)** / **Flask** / **Django**.
+ * 비즈니스 로직(chat/llm/tools/rag/test)은 프레임워크 무관하게 공유하고, 서버 진입점+requirements+Dockerfile 만
+ * 분기한다. Node 참조와 동일한 REST 계약(/health, /api/chat[, /stream, /confirm])·깊이(멀티턴·SSE·tool-use·RAG·가드/안전·PII).
  */
 
 import type { AgentSpec } from "@/lib/agent-spec";
@@ -17,8 +17,18 @@ const REFUSAL_KO: Record<string, string> = {
   strict: "관련 규정을 근거로 명확히 거절하세요",
 };
 
-function requirementsTxt(spec: AgentSpec): string {
-  const reqs = ["fastapi>=0.110", "uvicorn[standard]>=0.29", "pydantic>=2.6"];
+/** Python 프레임워크 해소 — 카탈로그 선택(fastapi/django/flask), 미지정/미상이면 대표 fastapi. */
+const PY_FRAMEWORKS = ["fastapi", "django", "flask"];
+function pyFramework(spec: AgentSpec): string {
+  const f = spec.backend.framework;
+  return f && PY_FRAMEWORKS.includes(f) ? f : "fastapi";
+}
+
+function requirementsTxt(spec: AgentSpec, fw: string): string {
+  let reqs: string[];
+  if (fw === "django") reqs = ["django>=5.0"];
+  else if (fw === "flask") reqs = ["flask>=3.0"];
+  else reqs = ["fastapi>=0.110", "uvicorn[standard]>=0.29", "pydantic>=2.6"];
   if (spec.llm.provider === "claude" && spec.llm.serving === "official-api") {
     reqs.push("anthropic>=0.39");
   } else {
@@ -478,6 +488,249 @@ app.mount("/", StaticFiles(directory="public", html=True), name="static")
 `;
 }
 
+/* ----------------------------- Flask 변형 --------------------------------- */
+
+function flaskAppPy(spec: AgentSpec): string {
+  const stream = spec.interaction.streaming.enabled;
+  const confirm =
+    spec.interaction.agentMode === "tool-agent" && spec.interaction.toolPolicy === "confirm";
+  const audit = spec.backend.logging.audit || spec.ops.audit;
+  const rateLimit = spec.agent.safety.rateLimitPerMin;
+  const abuse = spec.agent.safety.abuseFilter;
+  const maxChars = spec.interaction.inputLimits.maxChars;
+
+  const guardChecks: string[] = [];
+  if (maxChars)
+    guardChecks.push(
+      `    if isinstance(msg, str) and len(msg) > ${maxChars}:\n        return jsonify({"error": "메시지가 너무 깁니다(최대 ${maxChars}자)."}), 400`,
+    );
+  if (abuse) guardChecks.push(`    if _is_abusive(msg):\n        return jsonify({"error": "부적절한 입력이 감지되었습니다."}), 400`);
+  if (rateLimit)
+    guardChecks.push(
+      `    ip = request.remote_addr or "unknown"\n    now = time.time()\n    w = _HITS.get(ip)\n    if not w or now - w[1] > 60:\n        _HITS[ip] = [1, now]\n    elif w[0] >= RATE_PER_MIN:\n        return jsonify({"error": "요청이 너무 많습니다. 잠시 후 다시 시도하세요."}), 429\n    else:\n        w[0] += 1`,
+    );
+  const guardHelpers =
+    (rateLimit ? `RATE_PER_MIN = ${rateLimit}\n_HITS: dict[str, list[float]] = {}\n` : "") +
+    (abuse
+      ? `_BANNED = [re.compile(r"(.)\\1{20,}")]  # 과도한 반복 등\n\n\ndef _is_abusive(m) -> bool:\n    return isinstance(m, str) and any(p.search(m) for p in _BANNED)\n`
+      : "");
+  const guardFn = `\ndef _guard(body):\n    msg = body.get("message")\n${
+    guardChecks.join("\n") || "    _ = msg"
+  }\n    return None\n`;
+
+  const auditMw = audit
+    ? `\n\n@app.before_request\ndef _audit():\n    # 감사 로그 (audit=true) — TODO: 보관소/포맷을 기관 정책에 맞게 (개인정보 주의)\n    print(json.dumps({"ts": datetime.utcnow().isoformat(), "method": request.method, "path": request.path}))\n`
+    : "";
+
+  const streamRoute = stream
+    ? `\n\n@app.post("/api/chat/stream")\ndef chat_stream():\n    body = request.get_json(silent=True) or {}\n    message = body.get("message")\n    if not isinstance(message, str) or not message.strip():\n        return jsonify({"error": "message 가 필요합니다."}), 400\n    err = _guard(body)\n    if err:\n        return err\n    session_id = body.get("sessionId")\n\n    def gen():\n        loop = asyncio.new_event_loop()\n        agen = answer_stream(message, session_id)\n        try:\n            while True:\n                try:\n                    ev = loop.run_until_complete(agen.__anext__())\n                except StopAsyncIteration:\n                    break\n                yield f"data: {json.dumps(ev, ensure_ascii=False)}\\n\\n"\n            yield "event: done\\ndata: {}\\n\\n"\n        finally:\n            loop.close()\n\n    return Response(gen(), mimetype="text/event-stream")`
+    : "";
+  const confirmRoute = confirm
+    ? `\n\n@app.post("/api/chat/confirm")\ndef chat_confirm():\n    # 도구 실행 승인 (toolPolicy=confirm) — HITL 핸드셰이크.\n    body = request.get_json(silent=True) or {}\n    if not isinstance(body.get("confirmToken"), str):\n        return jsonify({"error": "confirmToken 이 필요합니다."}), 400\n    return jsonify({"status": "executed" if body.get("approved") else "rejected", "note": "TODO: confirm 흐름 구현"})`
+    : "";
+
+  const chatImport = `from chat import answer${stream ? ", answer_stream" : ""}`;
+  const imports = [
+    "import asyncio",
+    "import json",
+    audit ? "from datetime import datetime" : "",
+    rateLimit ? "import time" : "",
+    abuse || rateLimit ? "import re" : "",
+    "",
+    "from flask import Flask, jsonify, request, Response, send_from_directory",
+    "",
+    chatImport,
+  ]
+    .filter((l) => l !== "" || true) // keep blanks intentionally below
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n");
+
+  return `"""진입점 — Flask. 헬스체크 + 채팅 API 골격. (PROMPT.md 지시로 로직을 채운다)
+async 비즈니스 로직(chat.py)은 asyncio.run / 이벤트 루프로 구동한다."""
+${imports}
+
+app = Flask(__name__, static_folder="public", static_url_path="")
+${guardHelpers}${guardFn}${auditMw}
+
+
+@app.get("/health")
+def health():
+    return jsonify({"status": "ok"})
+
+
+@app.get("/")
+def index():
+    return send_from_directory("public", "index.html")
+
+
+@app.post("/api/chat")
+def chat():
+    body = request.get_json(silent=True) or {}
+    message = body.get("message")
+    if not isinstance(message, str) or not message.strip():
+        return jsonify({"error": "message 가 필요합니다."}), 400
+    err = _guard(body)
+    if err:
+        return err
+    return jsonify(asyncio.run(answer(message, body.get("sessionId"))))${streamRoute}${confirmRoute}
+
+
+if __name__ == "__main__":
+    import os
+
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", "3000")))
+`;
+}
+
+/* ----------------------------- Django 변형 -------------------------------- */
+
+function djangoViewsPy(spec: AgentSpec): string {
+  const stream = spec.interaction.streaming.enabled;
+  const confirm =
+    spec.interaction.agentMode === "tool-agent" && spec.interaction.toolPolicy === "confirm";
+  const rateLimit = spec.agent.safety.rateLimitPerMin;
+  const abuse = spec.agent.safety.abuseFilter;
+  const maxChars = spec.interaction.inputLimits.maxChars;
+
+  const guardChecks: string[] = [];
+  if (maxChars)
+    guardChecks.push(
+      `    if isinstance(msg, str) and len(msg) > ${maxChars}:\n        return JsonResponse({"error": "메시지가 너무 깁니다(최대 ${maxChars}자)."}, status=400)`,
+    );
+  if (abuse) guardChecks.push(`    if _is_abusive(msg):\n        return JsonResponse({"error": "부적절한 입력이 감지되었습니다."}, status=400)`);
+  if (rateLimit)
+    guardChecks.push(
+      `    ip = request.META.get("REMOTE_ADDR", "unknown")\n    now = time.time()\n    w = _HITS.get(ip)\n    if not w or now - w[1] > 60:\n        _HITS[ip] = [1, now]\n    elif w[0] >= RATE_PER_MIN:\n        return JsonResponse({"error": "요청이 너무 많습니다. 잠시 후 다시 시도하세요."}, status=429)\n    else:\n        w[0] += 1`,
+    );
+  const guardHelpers =
+    (rateLimit ? `RATE_PER_MIN = ${rateLimit}\n_HITS: dict = {}\n` : "") +
+    (abuse
+      ? `_BANNED = [re.compile(r"(.)\\1{20,}")]\n\n\ndef _is_abusive(m) -> bool:\n    return isinstance(m, str) and any(p.search(m) for p in _BANNED)\n`
+      : "");
+  const guardFn = `\ndef _guard(request, body):\n    msg = body.get("message")\n${
+    guardChecks.join("\n") || "    _ = msg"
+  }\n    return None\n`;
+
+  const streamView = stream
+    ? `\n\n@csrf_exempt\ndef chat_stream(request):\n    body = json.loads(request.body or b"{}")\n    message = body.get("message")\n    if not isinstance(message, str) or not message.strip():\n        return JsonResponse({"error": "message 가 필요합니다."}, status=400)\n    err = _guard(request, body)\n    if err:\n        return err\n    session_id = body.get("sessionId")\n\n    def gen():\n        loop = asyncio.new_event_loop()\n        agen = answer_stream(message, session_id)\n        try:\n            while True:\n                try:\n                    ev = loop.run_until_complete(agen.__anext__())\n                except StopAsyncIteration:\n                    break\n                yield f"data: {json.dumps(ev, ensure_ascii=False)}\\n\\n"\n            yield "event: done\\ndata: {}\\n\\n"\n        finally:\n            loop.close()\n\n    return StreamingHttpResponse(gen(), content_type="text/event-stream")`
+    : "";
+  const confirmView = confirm
+    ? `\n\n@csrf_exempt\ndef chat_confirm(request):\n    body = json.loads(request.body or b"{}")\n    if not isinstance(body.get("confirmToken"), str):\n        return JsonResponse({"error": "confirmToken 이 필요합니다."}, status=400)\n    return JsonResponse({"status": "executed" if body.get("approved") else "rejected", "note": "TODO: confirm 흐름 구현"})`
+    : "";
+  const chatImport = `from chat import answer${stream ? ", answer_stream" : ""}`;
+
+  return `"""Django 뷰 — 헬스체크 + 채팅 API + 정적(채팅 위젯) 서빙."""
+import asyncio
+import json
+import os
+${rateLimit || stream ? "import time\n" : ""}${abuse ? "import re\n" : ""}
+from django.http import FileResponse, JsonResponse, StreamingHttpResponse
+from django.views.decorators.csrf import csrf_exempt
+
+${chatImport}
+${guardHelpers}${guardFn}
+
+async def health(request):
+    return JsonResponse({"status": "ok"})
+
+
+@csrf_exempt
+async def chat(request):
+    body = json.loads(request.body or b"{}")
+    message = body.get("message")
+    if not isinstance(message, str) or not message.strip():
+        return JsonResponse({"error": "message 가 필요합니다."}, status=400)
+    err = _guard(request, body)
+    if err:
+        return err
+    return JsonResponse(await answer(message, body.get("sessionId")))${streamView}${confirmView}
+
+
+def index(request):
+    return FileResponse(open(os.path.join("public", "index.html"), "rb"))
+
+
+def asset(request, name):
+    return FileResponse(open(os.path.join("public", name), "rb"))
+`;
+}
+
+function djangoUrlsPy(spec: AgentSpec): string {
+  const stream = spec.interaction.streaming.enabled;
+  const confirm =
+    spec.interaction.agentMode === "tool-agent" && spec.interaction.toolPolicy === "confirm";
+  const routes = [
+    `    path("health", views.health),`,
+    `    path("api/chat", views.chat),`,
+    stream ? `    path("api/chat/stream", views.chat_stream),` : "",
+    confirm ? `    path("api/chat/confirm", views.chat_confirm),` : "",
+    `    path("", views.index),`,
+    `    re_path(r"^(?P<name>[\\w.\\-]+\\.(?:js|css|html))$", views.asset),`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return `from django.urls import path, re_path
+
+import views  # 프로젝트 루트의 views.py (manage.py 가 루트를 sys.path 에 둔다)
+
+urlpatterns = [
+${routes}
+]
+`;
+}
+
+const DJANGO_SETTINGS = `"""최소 Django 설정 — 채팅 API + 정적 위젯 서빙용."""
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+SECRET_KEY = "dev-only-change-me"  # TODO: 운영은 환경변수로 주입
+DEBUG = False
+ALLOWED_HOSTS = ["*"]
+
+INSTALLED_APPS = []
+MIDDLEWARE = ["django.middleware.common.CommonMiddleware"]
+ROOT_URLCONF = "config.urls"
+TEMPLATES = []
+WSGI_APPLICATION = "config.wsgi.application"
+ASGI_APPLICATION = "config.asgi.application"
+DATABASES = {}
+STATIC_URL = "static/"
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+`;
+
+const DJANGO_MANAGE = `#!/usr/bin/env python
+"""Django 관리 진입점."""
+import os
+import sys
+
+
+def main():
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+    from django.core.management import execute_from_command_line
+
+    execute_from_command_line(sys.argv)
+
+
+if __name__ == "__main__":
+    main()
+`;
+
+const DJANGO_ASGI = `import os
+
+from django.core.asgi import get_asgi_application
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+application = get_asgi_application()
+`;
+
+const DJANGO_WSGI = `import os
+
+from django.core.wsgi import get_wsgi_application
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+application = get_wsgi_application()
+`;
+
 function toolsPy(spec: AgentSpec): string {
   const tools = spec.integrations.tools.length
     ? spec.integrations.tools
@@ -662,30 +915,51 @@ venv/
 *.log
 `;
 
-function dockerfilePy(): string {
+function dockerfilePy(fw: string): string {
+  const cmd =
+    fw === "fastapi"
+      ? `CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3000"]`
+      : fw === "flask"
+        ? `CMD ["python", "app.py"]`
+        : `CMD ["sh", "-c", "python manage.py runserver 0.0.0.0:3000"]`; // django
   return `FROM python:3.11-slim
 WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 EXPOSE 3000
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "3000"]
+${cmd}
 `;
 }
 
-/** Python(FastAPI) 백엔드 스캐폴드 파일 묶음 */
+/** Python 백엔드 스캐폴드 파일 묶음 — 프레임워크(fastapi/flask/django) 분기. */
 export function pythonBackendFiles(spec: AgentSpec, _slug: string): GeneratedFile[] {
   void _slug;
+  const fw = pyFramework(spec);
+  // 비즈니스 로직(chat/llm/tools/rag/test)은 프레임워크 무관하게 공유한다.
   const files: GeneratedFile[] = [
-    { path: "requirements.txt", contents: requirementsTxt(spec) },
+    { path: "requirements.txt", contents: requirementsTxt(spec, fw) },
     { path: "pytest.ini", contents: PYTEST_INI },
-    { path: "main.py", contents: mainPy(spec) },
     { path: "chat.py", contents: chatPy(spec) },
     { path: "llm_client.py", contents: llmClientPy(spec) },
     { path: "tests/test_golden.py", contents: goldenTestPy(spec) },
     { path: ".env.example", contents: envEntries(spec).join("\n") + "\n" },
     { path: ".gitignore", contents: GITIGNORE_PY },
   ];
+  // 서버 진입점만 프레임워크별로 분기한다.
+  if (fw === "flask") {
+    files.push({ path: "app.py", contents: flaskAppPy(spec) });
+  } else if (fw === "django") {
+    files.push({ path: "manage.py", contents: DJANGO_MANAGE });
+    files.push({ path: "config/__init__.py", contents: "" });
+    files.push({ path: "config/settings.py", contents: DJANGO_SETTINGS });
+    files.push({ path: "config/urls.py", contents: djangoUrlsPy(spec) });
+    files.push({ path: "config/asgi.py", contents: DJANGO_ASGI });
+    files.push({ path: "config/wsgi.py", contents: DJANGO_WSGI });
+    files.push({ path: "views.py", contents: djangoViewsPy(spec) });
+  } else {
+    files.push({ path: "main.py", contents: mainPy(spec) }); // fastapi (대표/기본)
+  }
   if (spec.rag.enabled) {
     files.push({ path: "rag/__init__.py", contents: "" });
     files.push({ path: "rag/pipeline.py", contents: ragPipelinePy(spec) });
@@ -694,7 +968,7 @@ export function pythonBackendFiles(spec: AgentSpec, _slug: string): GeneratedFil
     files.push({ path: "tools.py", contents: toolsPy(spec) });
   }
   if (spec.backend.deploy === "docker" || spec.backend.deploy === "kubernetes") {
-    files.push({ path: "Dockerfile", contents: dockerfilePy() });
+    files.push({ path: "Dockerfile", contents: dockerfilePy(fw) });
   }
   return files;
 }

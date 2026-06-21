@@ -1,12 +1,12 @@
 /**
  * Go 백엔드 스캐폴드 (풀 패리티). (PLAN.md M7-D)
  *
- * 폐쇄망/오프라인 친화 + 검증 안정성을 위해 **표준 라이브러리 net/http** 기반으로 생성한다(외부 의존성 0).
- * 카탈로그의 대표 프레임워크(Gin/Echo)는 주석/PROMPT 로 안내하고, 골격은 stdlib 로 둔다.
- * Node 참조와 동일한 REST 계약·깊이(멀티턴·SSE 스트리밍·tool-use 루프·RAG·가드/안전·PII 마스킹).
+ * 프레임워크 분기(backend.framework): **net/http(기본, 의존성 0)** / **Gin** / **Echo**.
+ * 비즈니스 로직(가드·세션·RAG·도구·answer/answerStream)은 프레임워크 무관하게 공유하고, HTTP 핸들러+main+
+ * import 만 프레임워크별로 분기한다. Node 참조와 동일한 REST 계약·깊이(멀티턴·SSE·tool-use·RAG·가드/안전·PII).
  *
- * 단일 패키지(main): main.go(서버+오케스트레이션+RAG+도구) + llm.go(클라이언트). Go 의 unused-import
- * 규칙 때문에 import 는 사용처에 맞춰 정밀 계산한다.
+ * 단일 패키지(main): main.go(비즈니스+서버) + llm.go(클라이언트). Go 의 unused-import 규칙 때문에
+ * import 는 사용처에 맞춰 정밀 계산한다. gin/echo 는 `go mod tidy` 로 모듈을 받는다.
  */
 
 import type { AgentSpec } from "@/lib/agent-spec";
@@ -31,6 +31,13 @@ function goString(s: string): string {
   return JSON.stringify(s);
 }
 
+/** Go 프레임워크 해소 — 카탈로그 선택(gin/echo), 미지정/미상이면 표준 라이브러리 net/http. */
+const GO_FRAMEWORKS = ["gin", "echo"];
+function goFramework(spec: AgentSpec): string {
+  const f = spec.backend.framework;
+  return f && GO_FRAMEWORKS.includes(f) ? f : "nethttp";
+}
+
 function mainGo(spec: AgentSpec): string {
   const it = spec.interaction;
   const rag = spec.rag.enabled;
@@ -48,26 +55,9 @@ function mainGo(spec: AgentSpec): string {
   const maxChars = spec.interaction.inputLimits.maxChars;
   const grounded = spec.llm.guardrails.groundedOnly;
 
-  // import 집합 — 사용처에 맞춰 정밀 계산
-  const imports = new Set<string>(["encoding/json", "log", "net/http", "os", "strings"]);
-  if (audit || rateLimit) imports.add("time");
-  if (abuse || masking) imports.add("regexp");
-  if (multiTurn || rateLimit) imports.add("sync");
-  if (rag) imports.add("sort");
-  if (rag) imports.add("fmt"); // gather 의 출처 포맷(Sprintf)
+  const fw = goFramework(spec);
 
-  // --- 안전/가드 ---
-  const guardChecks: string[] = [];
-  if (maxChars)
-    guardChecks.push(
-      `\tif len(msg) > ${maxChars} {\n\t\thttp.Error(w, "메시지가 너무 깁니다(최대 ${maxChars}자).", 400)\n\t\treturn false\n\t}`,
-    );
-  if (abuse)
-    guardChecks.push(`\tif isAbusive(msg) {\n\t\thttp.Error(w, "부적절한 입력이 감지되었습니다.", 400)\n\t\treturn false\n\t}`);
-  if (rateLimit)
-    guardChecks.push(
-      `\tip := strings.Split(r.RemoteAddr, ":")[0]\n\thitsMu.Lock()\n\tnow := time.Now().Unix()\n\tw0 := hits[ip]\n\tif w0 == nil || now-w0.t > 60 {\n\t\thits[ip] = &window{n: 1, t: now}\n\t} else if w0.n >= ratePerMin {\n\t\thitsMu.Unlock()\n\t\thttp.Error(w, "요청이 너무 많습니다. 잠시 후 다시 시도하세요.", 429)\n\t\treturn false\n\t} else {\n\t\tw0.n++\n\t}\n\thitsMu.Unlock()`,
-    );
+  // --- 안전/가드 상태 (프레임워크 무관) ---
   const guardDecls =
     (rateLimit
       ? `\nconst ratePerMin = ${rateLimit}\n\ntype window struct {\n\tn int\n\tt int64\n}\n\nvar (\n\thits   = map[string]*window{}\n\thitsMu sync.Mutex\n)\n`
@@ -75,9 +65,21 @@ function mainGo(spec: AgentSpec): string {
     (abuse
       ? `\nvar bannedPat = regexp.MustCompile(` + "`(.)\\\\1{20,}`" + `) // 과도한 반복 등\n\nfunc isAbusive(m string) bool { return bannedPat.MatchString(m) }\n`
       : "");
-  const guardFn = `\n// guard 는 채팅 요청 공통 가드(입력길이/남용/rate limit). 통과하면 true.\nfunc guard(w http.ResponseWriter, r *http.Request, msg string) bool {\n${
-    guardChecks.join("\n") || "\t_ = msg"
-  }\n\treturn true\n}\n`;
+  // guardCheck(ip,msg) → (code, message). 0 이면 통과. 프레임워크 핸들러가 이 결과로 응답한다.
+  const gcChecks: string[] = [];
+  if (maxChars)
+    gcChecks.push(`\tif len(msg) > ${maxChars} {\n\t\treturn 400, "메시지가 너무 깁니다(최대 ${maxChars}자)."\n\t}`);
+  if (abuse) gcChecks.push(`\tif isAbusive(msg) {\n\t\treturn 400, "부적절한 입력이 감지되었습니다."\n\t}`);
+  if (rateLimit)
+    gcChecks.push(
+      `\thitsMu.Lock()\n\tnow := time.Now().Unix()\n\tw0 := hits[ip]\n\tif w0 == nil || now-w0.t > 60 {\n\t\thits[ip] = &window{n: 1, t: now}\n\t} else if w0.n >= ratePerMin {\n\t\thitsMu.Unlock()\n\t\treturn 429, "요청이 너무 많습니다. 잠시 후 다시 시도하세요."\n\t} else {\n\t\tw0.n++\n\t}\n\thitsMu.Unlock()`,
+    );
+  const gcUnused: string[] = [];
+  if (!rateLimit) gcUnused.push("\t_ = ip");
+  if (!(maxChars || abuse)) gcUnused.push("\t_ = msg");
+  const guardCheckFn = `\nfunc guardCheck(ip, msg string) (int, string) {\n${[...gcUnused, ...gcChecks].join(
+    "\n",
+  )}\n\treturn 0, ""\n}\n`;
 
   // --- 마스킹 ---
   const maskDecl = masking
@@ -126,41 +128,10 @@ function mainGo(spec: AgentSpec): string {
 
   const wantTrace = toolAgent && it.rendering.toolCallDisplay !== "hidden";
 
-  // --- 스트리밍 핸들러 ---
-  const streamHandler = stream
+  // --- 비즈니스(프레임워크 무관) 스트리밍 함수 ---
+  const answerStreamFn = stream
     ? `
-
-// chatStreamHandler 는 SSE 로 (도구 trace→토큰 델타→sources) 를 전송한다.
-func chatStreamHandler(w http.ResponseWriter, r *http.Request) {
-	var body map[string]any
-	json.NewDecoder(r.Body).Decode(&body)
-	message, _ := body["message"].(string)
-	if strings.TrimSpace(message) == "" {
-		http.Error(w, "message 가 필요합니다.", 400)
-		return
-	}
-	if !guard(w, r, message) {
-		return
-	}
-	sessionID, _ := body["sessionId"].(string)
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "streaming unsupported", 500)
-		return
-	}
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	emit := func(ev map[string]any) {
-		b, _ := json.Marshal(ev)
-		w.Write([]byte("data: " + string(b) + "\\n\\n"))
-		flusher.Flush()
-	}
-	answerStream(message, sessionID, emit)
-	w.Write([]byte("event: done\\ndata: {}\\n\\n"))
-	flusher.Flush()
-}
-
-// answerStream 은 스트리밍 이벤트를 emit 으로 전달한다.
+// answerStream 은 스트리밍 이벤트를 emit 으로 전달한다(프레임워크 무관).
 func answerStream(message, sessionID string, emit func(map[string]any)) {
 	contexts, sources, traces := gather(message)
 	system := buildSystemPrompt(contexts)
@@ -175,71 +146,17 @@ ${wantTrace ? "\tfor _, t := range traces {\n\t\temit(map[string]any{\"trace\": 
 	} else {
 ${
         toolAgent
-          ? "\t\tfull = " +
-            "completeWithTools(system, messages, toolDefs, tools, maxSteps)\n\t\temit(map[string]any{\"delta\": full})\n"
+          ? "\t\tfull = completeWithTools(system, messages, toolDefs, tools, maxSteps)\n\t\temit(map[string]any{\"delta\": full})\n"
           : "\t\tcompleteStream(system, messages, func(d string) {\n\t\t\tfull += d\n\t\t\temit(map[string]any{\"delta\": d})\n\t\t})\n"
       }	}
 	saveHistory(sessionID, messages, ${safe("full")})
 	emit(map[string]any{"sources": sources})
-}`
-    : "";
-
-  // --- confirm 핸들러 ---
-  const confirmHandler =
-    toolAgent && it.toolPolicy === "confirm"
-      ? `
-
-// chatConfirmHandler — 도구 실행 승인(toolPolicy=confirm) HITL 핸드셰이크.
-func chatConfirmHandler(w http.ResponseWriter, r *http.Request) {
-	var body map[string]any
-	json.NewDecoder(r.Body).Decode(&body)
-	if _, ok := body["confirmToken"].(string); !ok {
-		http.Error(w, "confirmToken 이 필요합니다.", 400)
-		return
-	}
-	approved, _ := body["approved"].(bool)
-	status := "rejected"
-	if approved {
-		status = "executed"
-	}
-	writeJSON(w, map[string]any{"status": status, "note": "TODO: confirm 흐름 구현"})
-}`
-      : "";
-
-  const auditMw = audit
-    ? `
-// auditLog 는 감사 로그(audit=true) — TODO: 보관소/포맷을 기관 정책에 맞게 (개인정보 주의).
-func auditLog(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		b, _ := json.Marshal(map[string]any{"ts": time.Now().UTC().Format(time.RFC3339), "method": r.Method, "path": r.URL.Path})
-		log.Println(string(b))
-		next.ServeHTTP(w, r)
-	})
 }
 `
     : "";
 
-  const muxUse = audit
-    ? `\thandler := auditLog(mux)\n\tlog.Fatal(http.ListenAndServe(":"+port, handler))`
-    : `\tlog.Fatal(http.ListenAndServe(":"+port, mux))`;
-
-  const importBlock = Array.from(imports)
-    .sort()
-    .map((i) => `\t${goString(i)}`)
-    .join("\n");
-
-  const traceDecl = toolAgent ? "" : "";
-  void traceDecl;
-
-  return `// 진입점 — 표준 라이브러리 net/http. 헬스체크 + 채팅 API 골격. (PROMPT.md 지시로 로직을 채운다)
-// 대표 프레임워크: ${spec.backend.framework ?? "gin"} (운영 시 전환 가능). 동작: ${it.agentMode}.
-package main
-
-import (
-${importBlock}
-)
-
-// Msg 는 대화 메시지.
+  // --- 비즈니스 코드(프레임워크 무관, 모두 package main 의 같은 파일에 둔다) ---
+  const business = `// Msg 는 대화 메시지.
 type Msg struct {
 	Role    string \`json:"role"\`
 	Content string \`json:"content"\`
@@ -253,7 +170,7 @@ type ChatResult struct {
 
 const groundedOnly = ${grounded} // 근거 기반 답변 강제
 var stub = os.Getenv("LLM_STUB") == "true" // 테스트/오프라인: 실제 LLM 호출 없이 결정적 스텁
-${maxStepsDecl}${sessionDecl}${guardDecls}${maskDecl}${toolDecl}${ragDecl}
+${maxStepsDecl}${sessionDecl}${guardDecls}${guardCheckFn}${maskDecl}${toolDecl}${ragDecl}
 // gather 는 컨텍스트(RAG 검색${toolAgent ? " + 도구 호출" : ""})를 구성한다.
 func gather(message string) (contexts []string, sources []string, traces []map[string]any) {
 ${ragBlock}${toolSim}	return contexts, sources, traces
@@ -305,8 +222,271 @@ func answer(message, sessionID string) ChatResult {
 	saveHistory(sessionID, messages, answerText)
 	return ChatResult{Answer: answerText, Sources: sources}
 }
+${answerStreamFn}`;
 
-func writeJSON(w http.ResponseWriter, v any) {
+  // --- import 집합: 비즈니스 + 서버(프레임워크별) ---
+  const bImports = new Set<string>(["os", "strings"]);
+  if (rag) {
+    bImports.add("fmt");
+    bImports.add("sort");
+  }
+  if (abuse || masking) bImports.add("regexp");
+  if (multiTurn || rateLimit) bImports.add("sync");
+  if (rateLimit) bImports.add("time");
+  if (toolAgent) bImports.add("encoding/json");
+
+  const streamMainRoute = (fmt: (route: string, handler: string) => string): string =>
+    (stream ? fmt("/api/chat/stream", "chatStreamHandler") : "") +
+    (toolAgent && it.toolPolicy === "confirm" ? fmt("/api/chat/confirm", "chatConfirmHandler") : "");
+
+  let server: string;
+  const sImports = new Set<string>();
+
+  if (fw === "gin") {
+    sImports.add("github.com/gin-gonic/gin").add("net/http").add("log").add("os").add("strings");
+    if (stream) sImports.add("encoding/json");
+    if (audit) sImports.add("encoding/json").add("time");
+    const ginStream = stream
+      ? `
+func chatStreamHandler(c *gin.Context) {
+	var body map[string]any
+	c.BindJSON(&body)
+	message, _ := body["message"].(string)
+	if strings.TrimSpace(message) == "" {
+		c.JSON(400, gin.H{"error": "message 가 필요합니다."})
+		return
+	}
+	if code, m := guardCheck(c.ClientIP(), message); code != 0 {
+		c.JSON(code, gin.H{"error": m})
+		return
+	}
+	sessionID, _ := body["sessionId"].(string)
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	emit := func(ev map[string]any) {
+		b, _ := json.Marshal(ev)
+		c.Writer.Write([]byte("data: " + string(b) + "\\n\\n"))
+		c.Writer.Flush()
+	}
+	answerStream(message, sessionID, emit)
+	c.Writer.Write([]byte("event: done\\ndata: {}\\n\\n"))
+}
+`
+      : "";
+    const ginConfirm =
+      toolAgent && it.toolPolicy === "confirm"
+        ? `
+func chatConfirmHandler(c *gin.Context) {
+	var body map[string]any
+	c.BindJSON(&body)
+	if _, ok := body["confirmToken"].(string); !ok {
+		c.JSON(400, gin.H{"error": "confirmToken 이 필요합니다."})
+		return
+	}
+	approved, _ := body["approved"].(bool)
+	status := "rejected"
+	if approved {
+		status = "executed"
+	}
+	c.JSON(200, gin.H{"status": status, "note": "TODO: confirm 흐름 구현"})
+}
+`
+        : "";
+    const ginAudit = audit
+      ? `	r.Use(func(c *gin.Context) {
+		b, _ := json.Marshal(map[string]any{"ts": time.Now().UTC().Format(time.RFC3339), "method": c.Request.Method, "path": c.Request.URL.Path})
+		log.Println(string(b))
+		c.Next()
+	})
+`
+      : "";
+    server = `func chatHandler(c *gin.Context) {
+	var body map[string]any
+	c.BindJSON(&body)
+	message, _ := body["message"].(string)
+	if strings.TrimSpace(message) == "" {
+		c.JSON(400, gin.H{"error": "message 가 필요합니다."})
+		return
+	}
+	if code, m := guardCheck(c.ClientIP(), message); code != 0 {
+		c.JSON(code, gin.H{"error": m})
+		return
+	}
+	sessionID, _ := body["sessionId"].(string)
+	c.JSON(200, answer(message, sessionID))
+}
+${ginStream}${ginConfirm}
+func main() {
+	r := gin.Default()
+${ginAudit}	r.GET("/health", func(c *gin.Context) { c.JSON(200, gin.H{"status": "ok"}) })
+	r.POST("/api/chat", chatHandler)
+${streamMainRoute((route, h) => `\tr.POST(${goString(route)}, ${h})\n`)}	r.NoRoute(gin.WrapH(http.FileServer(http.Dir("public"))))
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "3000"
+	}
+	log.Fatal(r.Run(":" + port))
+}
+`;
+  } else if (fw === "echo") {
+    sImports.add("github.com/labstack/echo/v4").add("log").add("os").add("strings");
+    if (stream) sImports.add("encoding/json");
+    if (audit) sImports.add("encoding/json").add("time");
+    const echoStream = stream
+      ? `
+func chatStreamHandler(c echo.Context) error {
+	var body map[string]any
+	c.Bind(&body)
+	message, _ := body["message"].(string)
+	if strings.TrimSpace(message) == "" {
+		return c.JSON(400, map[string]any{"error": "message 가 필요합니다."})
+	}
+	if code, m := guardCheck(c.RealIP(), message); code != 0 {
+		return c.JSON(code, map[string]any{"error": m})
+	}
+	sessionID, _ := body["sessionId"].(string)
+	res := c.Response()
+	res.Header().Set("Content-Type", "text/event-stream")
+	res.WriteHeader(200)
+	emit := func(ev map[string]any) {
+		b, _ := json.Marshal(ev)
+		res.Write([]byte("data: " + string(b) + "\\n\\n"))
+		res.Flush()
+	}
+	answerStream(message, sessionID, emit)
+	res.Write([]byte("event: done\\ndata: {}\\n\\n"))
+	return nil
+}
+`
+      : "";
+    const echoConfirm =
+      toolAgent && it.toolPolicy === "confirm"
+        ? `
+func chatConfirmHandler(c echo.Context) error {
+	var body map[string]any
+	c.Bind(&body)
+	if _, ok := body["confirmToken"].(string); !ok {
+		return c.JSON(400, map[string]any{"error": "confirmToken 이 필요합니다."})
+	}
+	approved, _ := body["approved"].(bool)
+	status := "rejected"
+	if approved {
+		status = "executed"
+	}
+	return c.JSON(200, map[string]any{"status": status, "note": "TODO: confirm 흐름 구현"})
+}
+`
+        : "";
+    const echoAudit = audit
+      ? `	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			b, _ := json.Marshal(map[string]any{"ts": time.Now().UTC().Format(time.RFC3339), "method": c.Request().Method, "path": c.Request().URL.Path})
+			log.Println(string(b))
+			return next(c)
+		}
+	})
+`
+      : "";
+    server = `func chatHandler(c echo.Context) error {
+	var body map[string]any
+	c.Bind(&body)
+	message, _ := body["message"].(string)
+	if strings.TrimSpace(message) == "" {
+		return c.JSON(400, map[string]any{"error": "message 가 필요합니다."})
+	}
+	if code, m := guardCheck(c.RealIP(), message); code != 0 {
+		return c.JSON(code, map[string]any{"error": m})
+	}
+	sessionID, _ := body["sessionId"].(string)
+	return c.JSON(200, answer(message, sessionID))
+}
+${echoStream}${echoConfirm}
+func main() {
+	e := echo.New()
+${echoAudit}	e.GET("/health", func(c echo.Context) error { return c.JSON(200, map[string]any{"status": "ok"}) })
+	e.POST("/api/chat", chatHandler)
+${streamMainRoute((route, h) => `\te.POST(${goString(route)}, ${h})\n`)}	e.Static("/", "public")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "3000"
+	}
+	log.Fatal(e.Start(":" + port))
+}
+`;
+  } else {
+    // net/http (대표/기본)
+    sImports.add("net/http").add("log").add("encoding/json").add("strings").add("os");
+    if (audit) sImports.add("time");
+    const nhStream = stream
+      ? `
+// chatStreamHandler 는 SSE 로 (도구 trace→토큰 델타→sources) 를 전송한다.
+func chatStreamHandler(w http.ResponseWriter, r *http.Request) {
+	var body map[string]any
+	json.NewDecoder(r.Body).Decode(&body)
+	message, _ := body["message"].(string)
+	if strings.TrimSpace(message) == "" {
+		http.Error(w, "message 가 필요합니다.", 400)
+		return
+	}
+	if code, m := guardCheck(strings.Split(r.RemoteAddr, ":")[0], message); code != 0 {
+		http.Error(w, m, code)
+		return
+	}
+	sessionID, _ := body["sessionId"].(string)
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", 500)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	emit := func(ev map[string]any) {
+		b, _ := json.Marshal(ev)
+		w.Write([]byte("data: " + string(b) + "\\n\\n"))
+		flusher.Flush()
+	}
+	answerStream(message, sessionID, emit)
+	w.Write([]byte("event: done\\ndata: {}\\n\\n"))
+	flusher.Flush()
+}
+`
+      : "";
+    const nhConfirm =
+      toolAgent && it.toolPolicy === "confirm"
+        ? `
+// chatConfirmHandler — 도구 실행 승인(toolPolicy=confirm) HITL 핸드셰이크.
+func chatConfirmHandler(w http.ResponseWriter, r *http.Request) {
+	var body map[string]any
+	json.NewDecoder(r.Body).Decode(&body)
+	if _, ok := body["confirmToken"].(string); !ok {
+		http.Error(w, "confirmToken 이 필요합니다.", 400)
+		return
+	}
+	approved, _ := body["approved"].(bool)
+	status := "rejected"
+	if approved {
+		status = "executed"
+	}
+	writeJSON(w, map[string]any{"status": status, "note": "TODO: confirm 흐름 구현"})
+}
+`
+        : "";
+    const nhAudit = audit
+      ? `
+// auditLog 는 감사 로그(audit=true) — TODO: 보관소/포맷을 기관 정책에 맞게 (개인정보 주의).
+func auditLog(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := json.Marshal(map[string]any{"ts": time.Now().UTC().Format(time.RFC3339), "method": r.Method, "path": r.URL.Path})
+		log.Println(string(b))
+		next.ServeHTTP(w, r)
+	})
+}
+`
+      : "";
+    const muxUse = audit
+      ? `	handler := auditLog(mux)\n\tlog.Fatal(http.ListenAndServe(":"+port, handler))`
+      : `	log.Fatal(http.ListenAndServe(":"+port, mux))`;
+    server = `func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v)
 }
@@ -319,14 +499,14 @@ func chatHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "message 가 필요합니다.", 400)
 		return
 	}
-	if !guard(w, r, message) {
+	if code, m := guardCheck(strings.Split(r.RemoteAddr, ":")[0], message); code != 0 {
+		http.Error(w, m, code)
 		return
 	}
 	sessionID, _ := body["sessionId"].(string)
 	writeJSON(w, answer(message, sessionID))
 }
-${guardFn}${streamHandler}${confirmHandler}
-${auditMw}
+${nhStream}${nhConfirm}${nhAudit}
 func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.Dir("public")))
@@ -334,9 +514,7 @@ func main() {
 		writeJSON(w, map[string]any{"status": "ok"})
 	})
 	mux.HandleFunc("/api/chat", chatHandler)
-${stream ? "\tmux.HandleFunc(\"/api/chat/stream\", chatStreamHandler)\n" : ""}${
-    toolAgent && it.toolPolicy === "confirm" ? "\tmux.HandleFunc(\"/api/chat/confirm\", chatConfirmHandler)\n" : ""
-  }	port := os.Getenv("PORT")
+${streamMainRoute((route, h) => `\tmux.HandleFunc(${goString(route)}, ${h})\n`)}	port := os.Getenv("PORT")
 	if port == "" {
 		port = "3000"
 	}
@@ -344,6 +522,24 @@ ${stream ? "\tmux.HandleFunc(\"/api/chat/stream\", chatStreamHandler)\n" : ""}${
 ${muxUse}
 }
 `;
+  }
+
+  const importBlock = Array.from(new Set<string>([...bImports, ...sImports]))
+    .sort()
+    .map((i) => `\t${goString(i)}`)
+    .join("\n");
+
+  const fwLabel = fw === "gin" ? "Gin" : fw === "echo" ? "Echo" : "표준 라이브러리 net/http";
+  return `// 진입점 — ${fwLabel}. 헬스체크 + 채팅 API 골격. (PROMPT.md 지시로 로직을 채운다)
+// 동작: ${it.agentMode}.
+package main
+
+import (
+${importBlock}
+)
+
+${business}
+${server}`;
 }
 
 function ragGo(spec: AgentSpec): string {
@@ -860,8 +1056,16 @@ const GITIGNORE_GO = `/server
 /** Go(net/http) 백엔드 스캐폴드 파일 묶음 */
 export function goBackendFiles(spec: AgentSpec, slug: string): GeneratedFile[] {
   const mod = goModuleName(slug);
+  const fw = goFramework(spec);
+  // gin/echo 는 외부 모듈이 필요하다(설치: `go mod tidy`). net/http 는 의존성 0.
+  const require =
+    fw === "gin"
+      ? "\nrequire github.com/gin-gonic/gin v1.10.0\n"
+      : fw === "echo"
+        ? "\nrequire github.com/labstack/echo/v4 v4.12.0\n"
+        : "";
   const files: GeneratedFile[] = [
-    { path: "go.mod", contents: `module ${mod}\n\ngo 1.22\n` },
+    { path: "go.mod", contents: `module ${mod}\n\ngo 1.22\n${require}` },
     { path: "main.go", contents: mainGo(spec) },
     { path: "llm.go", contents: llmGo(spec) },
     { path: "main_test.go", contents: goldenTestGo(spec) },

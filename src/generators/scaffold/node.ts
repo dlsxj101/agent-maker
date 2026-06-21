@@ -9,30 +9,51 @@ import type { AgentSpec } from "@/lib/agent-spec";
 import type { GeneratedFile } from "../index";
 import { envEntries } from "./shared";
 
-function packageJson(spec: AgentSpec, slug: string): string {
-  const deps: Record<string, string> = { express: "^4.21.2" };
-  if (spec.llm.provider === "claude" && spec.llm.serving === "official-api") {
-    deps["@anthropic-ai/sdk"] = "^0.32.1";
-  }
+/** Node 프레임워크 해소 — 카탈로그 선택(express/nestjs/fastify), 미지정/미상이면 대표 express. */
+const NODE_FRAMEWORKS = ["express", "nestjs", "fastify"];
+function nodeFramework(spec: AgentSpec): string {
+  const f = spec.backend.framework;
+  return f && NODE_FRAMEWORKS.includes(f) ? f : "express";
+}
+
+function packageJson(spec: AgentSpec, slug: string, fw: string): string {
+  const claude = spec.llm.provider === "claude" && spec.llm.serving === "official-api";
+  const entry = fw === "nestjs" ? "main" : "server";
+  let deps: Record<string, string>;
+  if (fw === "fastify") deps = { fastify: "^4.28.1", "@fastify/static": "^7.0.4" };
+  else if (fw === "nestjs")
+    deps = {
+      "@nestjs/common": "^10.4.4",
+      "@nestjs/core": "^10.4.4",
+      "@nestjs/platform-express": "^10.4.4",
+      "@nestjs/serve-static": "^4.0.2",
+      "reflect-metadata": "^0.2.2",
+      rxjs: "^7.8.1",
+    };
+  else deps = { express: "^4.21.2" };
+  if (claude) deps["@anthropic-ai/sdk"] = "^0.32.1";
+
+  const devDependencies: Record<string, string> = {
+    typescript: "^5.7.3",
+    tsx: "^4.19.2",
+    vitest: "^2.1.8",
+  };
+  if (fw === "express" || fw === "nestjs") devDependencies["@types/express"] = "^4.17.21";
+  devDependencies["@types/node"] = "^22.10.5";
+
   const pkg = {
     name: slug,
     version: "0.1.0",
     private: true,
     type: "module",
     scripts: {
-      dev: "tsx watch src/server.ts",
+      dev: `tsx watch src/${entry}.ts`,
       build: "tsc",
-      start: "node dist/server.js",
+      start: `node dist/${entry}.js`,
       test: "vitest run",
     },
     dependencies: deps,
-    devDependencies: {
-      typescript: "^5.7.3",
-      tsx: "^4.19.2",
-      vitest: "^2.1.8",
-      "@types/express": "^4.17.21",
-      "@types/node": "^22.10.5",
-    },
+    devDependencies,
   };
   return JSON.stringify(pkg, null, 2) + "\n";
 }
@@ -51,6 +72,28 @@ const TSCONFIG = `{
   "include": ["src"]
 }
 `;
+
+// NestJS 는 데코레이터 메타데이터가 필요하다(나머지는 동일).
+const TSCONFIG_NEST = `{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src"]
+}
+`;
+
+function tsconfigFor(fw: string): string {
+  return fw === "nestjs" ? TSCONFIG_NEST : TSCONFIG;
+}
 
 function serverTs(spec: AgentSpec): string {
   const audit = spec.backend.logging.audit || spec.ops.audit;
@@ -699,6 +742,179 @@ describe("골든셋 — 플러밍(LLM_STUB=true)", () => {
 ${accuracyBlock}`;
 }
 
+/* --------------------------- Fastify 변형 --------------------------------- */
+
+function fastifyServerTs(spec: AgentSpec): string {
+  const stream = spec.interaction.streaming.enabled;
+  const confirm =
+    spec.interaction.agentMode === "tool-agent" && spec.interaction.toolPolicy === "confirm";
+  const audit = spec.backend.logging.audit || spec.ops.audit;
+  const rateLimit = spec.agent.safety.rateLimitPerMin;
+  const abuse = spec.agent.safety.abuseFilter;
+  const maxChars = spec.interaction.inputLimits.maxChars;
+
+  const guardState =
+    (rateLimit ? `const RATE_PER_MIN = ${rateLimit};\nconst HITS = new Map<string, { n: number; t: number }>();\n` : "") +
+    (abuse ? `const BANNED = [/(.)\\1{20,}/];\nfunction isAbusive(m: unknown): boolean { return typeof m === "string" && BANNED.some((r) => r.test(m)); }\n` : "");
+  const guardChecks: string[] = [];
+  if (maxChars)
+    guardChecks.push(
+      `  if (typeof body.message === "string" && body.message.length > ${maxChars}) { reply.code(400).send({ error: "메시지가 너무 깁니다(최대 ${maxChars}자)." }); return false; }`,
+    );
+  if (abuse)
+    guardChecks.push(`  if (isAbusive(body.message)) { reply.code(400).send({ error: "부적절한 입력이 감지되었습니다." }); return false; }`);
+  if (rateLimit)
+    guardChecks.push(
+      `  const ip = req.ip ?? "unknown";\n  const now = Date.now();\n  const w = HITS.get(ip);\n  if (!w || now - w.t > 60000) HITS.set(ip, { n: 1, t: now });\n  else if (w.n >= RATE_PER_MIN) { reply.code(429).send({ error: "요청이 너무 많습니다. 잠시 후 다시 시도하세요." }); return false; }\n  else w.n++;`,
+    );
+  const guardFn = `function guard(req: FastifyRequest, reply: FastifyReply, body: Body): boolean {\n${
+    guardChecks.join("\n") || "  void req; void reply; void body;"
+  }\n  return true;\n}\n`;
+
+  const auditHook = audit
+    ? `\napp.addHook("onRequest", async (req) => {\n  // 감사 로그 (audit=true) — TODO: 보관소/포맷을 기관 정책에 맞게 (개인정보 주의)\n  console.log(JSON.stringify({ ts: new Date().toISOString(), method: req.method, path: req.url }));\n});\n`
+    : "";
+
+  const streamRoute = stream
+    ? `\napp.post("/api/chat/stream", async (req, reply) => {\n  const body = (req.body ?? {}) as Body;\n  if (typeof body.message !== "string" || !body.message.trim()) { reply.code(400).send({ error: "message 가 필요합니다." }); return; }\n  if (!guard(req, reply, body)) return;\n  reply.hijack();\n  reply.raw.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });\n  try {\n    for await (const ev of answerStream(body.message, body.sessionId)) reply.raw.write(\`data: \${JSON.stringify(ev)}\\n\\n\`);\n  } catch { reply.raw.write("event: error\\ndata: {}\\n\\n"); }\n  reply.raw.write("event: done\\ndata: {}\\n\\n");\n  reply.raw.end();\n});\n`
+    : "";
+  const confirmRoute = confirm
+    ? `\napp.post("/api/chat/confirm", async (req, reply) => {\n  const body = (req.body ?? {}) as Body;\n  if (typeof body.confirmToken !== "string") { reply.code(400).send({ error: "confirmToken 이 필요합니다." }); return; }\n  return { status: body.approved ? "executed" : "rejected", note: "TODO: confirm 흐름 구현" };\n});\n`
+    : "";
+
+  const imp = `import { answer${stream ? ", answerStream" : ""} } from "./chat.js";`;
+  return `// 진입점 — Fastify. 헬스체크 + 채팅 API 골격. (PROMPT.md 지시로 로직을 채운다)
+import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
+import fastifyStatic from "@fastify/static";
+import { join } from "node:path";
+${imp}
+
+interface Body { message?: string; sessionId?: string; confirmToken?: string; approved?: boolean; }
+
+const app = Fastify();
+await app.register(fastifyStatic, { root: join(process.cwd(), "public"), prefix: "/" });
+${guardState}${guardFn}${auditHook}
+app.get("/health", async () => ({ status: "ok" }));
+
+app.post("/api/chat", async (req, reply) => {
+  const body = (req.body ?? {}) as Body;
+  if (typeof body.message !== "string" || !body.message.trim()) { reply.code(400).send({ error: "message 가 필요합니다." }); return; }
+  if (!guard(req, reply, body)) return;
+  return await answer(body.message, body.sessionId);
+});
+${streamRoute}${confirmRoute}
+const port = Number(process.env.PORT ?? 3000);
+app.listen({ port, host: "0.0.0.0" }).then(() => console.log(\`server on :\${port}\`));
+`;
+}
+
+/* ---------------------------- NestJS 변형 --------------------------------- */
+
+function nestMainTs(): string {
+  return `// 진입점 — NestJS 부트스트랩. (PROMPT.md 지시로 로직을 채운다)
+import "reflect-metadata";
+import { NestFactory } from "@nestjs/core";
+import { AppModule } from "./app.module.js";
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  await app.listen(Number(process.env.PORT ?? 3000));
+}
+void bootstrap();
+`;
+}
+
+function nestModuleTs(): string {
+  return `import { Module } from "@nestjs/common";
+import { ServeStaticModule } from "@nestjs/serve-static";
+import { join } from "node:path";
+import { ChatController } from "./chat.controller.js";
+
+// 정적 파일(채팅 위젯)은 public/ 에서 서빙한다.
+@Module({
+  imports: [ServeStaticModule.forRoot({ rootPath: join(process.cwd(), "public") })],
+  controllers: [ChatController],
+})
+export class AppModule {}
+`;
+}
+
+function nestControllerTs(spec: AgentSpec): string {
+  const stream = spec.interaction.streaming.enabled;
+  const confirm =
+    spec.interaction.agentMode === "tool-agent" && spec.interaction.toolPolicy === "confirm";
+  const rateLimit = spec.agent.safety.rateLimitPerMin;
+  const abuse = spec.agent.safety.abuseFilter;
+  const maxChars = spec.interaction.inputLimits.maxChars;
+
+  const guardState =
+    (rateLimit ? `const RATE_PER_MIN = ${rateLimit};\nconst HITS = new Map<string, { n: number; t: number }>();\n` : "") +
+    (abuse ? `const BANNED = [/(.)\\1{20,}/];\nfunction isAbusive(m: unknown): boolean { return typeof m === "string" && BANNED.some((r) => r.test(m)); }\n` : "");
+  const guardChecks: string[] = [];
+  if (maxChars)
+    guardChecks.push(
+      `    if (typeof body.message === "string" && body.message.length > ${maxChars}) throw new HttpException("메시지가 너무 깁니다(최대 ${maxChars}자).", 400);`,
+    );
+  if (abuse)
+    guardChecks.push(`    if (isAbusive(body.message)) throw new HttpException("부적절한 입력이 감지되었습니다.", 400);`);
+  if (rateLimit)
+    guardChecks.push(
+      `    const ip = req.ip ?? "unknown";\n    const now = Date.now();\n    const w = HITS.get(ip);\n    if (!w || now - w.t > 60000) HITS.set(ip, { n: 1, t: now });\n    else if (w.n >= RATE_PER_MIN) throw new HttpException("요청이 너무 많습니다. 잠시 후 다시 시도하세요.", 429);\n    else w.n++;`,
+    );
+  const guardBody = guardChecks.join("\n") || "    void req; void body;";
+
+  const streamMethod = stream
+    ? `\n
+  @Post("api/chat/stream")
+  async chatStream(@Body() body: Body, @Req() req: Request, @Res() res: Response) {
+    if (typeof body.message !== "string" || !body.message.trim()) throw new HttpException("message 가 필요합니다.", 400);
+    this.guard(req, body);
+    res.set({ "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+    try {
+      for await (const ev of answerStream(body.message, body.sessionId)) res.write(\`data: \${JSON.stringify(ev)}\\n\\n\`);
+    } catch { res.write("event: error\\ndata: {}\\n\\n"); }
+    res.write("event: done\\ndata: {}\\n\\n");
+    res.end();
+  }`
+    : "";
+  const confirmMethod = confirm
+    ? `\n
+  @Post("api/chat/confirm")
+  chatConfirm(@Body() body: Body) {
+    if (typeof body.confirmToken !== "string") throw new HttpException("confirmToken 이 필요합니다.", 400);
+    return { status: body.approved ? "executed" : "rejected", note: "TODO: confirm 흐름 구현" };
+  }`
+    : "";
+
+  const imp = `import { answer${stream ? ", answerStream" : ""} } from "./chat.js";`;
+  return `// 채팅 컨트롤러 — NestJS. 헬스체크 + 채팅 API. (PROMPT.md 지시로 로직을 채운다)
+import { Body, Controller, Get, HttpException, Post, Req, Res } from "@nestjs/common";
+import type { Request, Response } from "express";
+${imp}
+
+interface Body { message?: string; sessionId?: string; confirmToken?: string; approved?: boolean; }
+${guardState}
+@Controller()
+export class ChatController {
+  private guard(req: Request, body: Body): void {
+${guardBody}
+  }
+
+  @Get("health")
+  health() {
+    return { status: "ok" };
+  }
+
+  @Post("api/chat")
+  async chat(@Body() body: Body, @Req() req: Request) {
+    if (typeof body.message !== "string" || !body.message.trim()) throw new HttpException("message 가 필요합니다.", 400);
+    this.guard(req, body);
+    return await answer(body.message, body.sessionId);
+  }${streamMethod}${confirmMethod}
+}
+`;
+}
+
 function dockerfile(): string {
   return `FROM node:22-slim
 WORKDIR /app
@@ -717,18 +933,29 @@ dist/
 *.log
 `;
 
-/** Node.js 백엔드 스캐폴드 파일 묶음 */
+/** Node.js 백엔드 스캐폴드 파일 묶음 — 프레임워크(express/fastify/nestjs) 분기. */
 export function nodeBackendFiles(spec: AgentSpec, slug: string): GeneratedFile[] {
+  const fw = nodeFramework(spec);
+  // 비즈니스 로직(chat/llm/rag/tools/test)은 프레임워크 무관하게 공유한다.
   const files: GeneratedFile[] = [
-    { path: "package.json", contents: packageJson(spec, slug) },
-    { path: "tsconfig.json", contents: TSCONFIG },
-    { path: "src/server.ts", contents: serverTs(spec) },
+    { path: "package.json", contents: packageJson(spec, slug, fw) },
+    { path: "tsconfig.json", contents: tsconfigFor(fw) },
     { path: "src/chat.ts", contents: chatTs(spec) },
     { path: "src/llm/client.ts", contents: llmClientTs(spec) },
     { path: "tests/golden.test.ts", contents: goldenTest(spec) },
     { path: ".env.example", contents: envEntries(spec).join("\n") + "\n" },
     { path: ".gitignore", contents: GITIGNORE },
   ];
+  // 서버 진입점만 프레임워크별로 분기한다.
+  if (fw === "fastify") {
+    files.push({ path: "src/server.ts", contents: fastifyServerTs(spec) });
+  } else if (fw === "nestjs") {
+    files.push({ path: "src/main.ts", contents: nestMainTs() });
+    files.push({ path: "src/app.module.ts", contents: nestModuleTs() });
+    files.push({ path: "src/chat.controller.ts", contents: nestControllerTs(spec) });
+  } else {
+    files.push({ path: "src/server.ts", contents: serverTs(spec) }); // express (대표/기본)
+  }
   if (spec.rag.enabled) {
     files.push({ path: "src/rag/pipeline.ts", contents: ragPipelineTs(spec) });
   }
