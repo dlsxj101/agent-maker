@@ -616,6 +616,7 @@ function chatUiJs(spec: AgentSpec): string {
           const ev = JSON.parse(line.slice(5).trim());
           if (ev.trace) add("trace", "🔧 도구 호출: " + ev.trace.tool);
           if (ev.delta) bot.textContent += ev.delta;
+          if (ev.sources) addSources(ev.sources);
         } catch (_) { /* skip */ }
       }
       log.scrollTop = log.scrollHeight;
@@ -638,6 +639,7 @@ function chatUiJs(spec: AgentSpec): string {
     });
     const data = await res.json();
     add("bot", data.answer ?? "(응답 없음)");
+    if (data.sources) addSources(data.sources);
   } catch (_) {
     add("bot", "오류가 발생했습니다.");
   }
@@ -654,6 +656,21 @@ function add(role, text) {
   log.appendChild(el);
   log.scrollTop = log.scrollHeight;
   return el;
+}
+
+// 출처(인용) 칩 렌더 — citationStyle 에 맞게 다듬는다.
+function addSources(sources) {
+  if (!sources || !sources.length) return;
+  const row = document.createElement("div");
+  row.className = "sources";
+  for (const s of sources) {
+    const c = document.createElement("span");
+    c.className = "chip";
+    c.textContent = s;
+    row.appendChild(c);
+  }
+  log.appendChild(row);
+  log.scrollTop = log.scrollHeight;
 }
 
 ${handler}
@@ -683,6 +700,8 @@ ${layoutCss}
 .bubble--user { align-self: flex-end; background: var(--color-primary); color: #fff; }
 .bubble--bot { align-self: flex-start; background: #fff; border: 1px solid var(--color-border); }
 .bubble--trace { align-self: flex-start; background: transparent; border: 1px dashed var(--color-border); color: var(--color-muted); font-size: 12px; font-family: var(--font-mono, monospace); }
+.sources { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 4px; }
+.chip { font-size: 11px; padding: 2px 8px; border: 1px solid var(--color-border); border-radius: 999px; color: var(--color-muted); background: var(--color-surface); }
 .chat__form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--color-border); }
 .chat__input { flex: 1; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 8px; font: inherit; }
 .chat__send { padding: 10px 16px; border: none; border-radius: 8px; background: var(--color-accent); color: #fff; cursor: pointer; }
