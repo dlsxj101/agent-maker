@@ -673,6 +673,8 @@ function buildSystemPrompt(contexts: string[]): string {
     "당신은 OO부의 안내 챗봇입니다.",
     "톤: concise. 한국어로 정중히 답합니다.",
     GROUNDED_ONLY ? "제공된 근거에 없는 내용은 추측하지 마세요." : "",
+    "답변이 불가능하면 정중히 사과하고 가능한 대안을 안내하세요.",
+    "개인정보(주민등록번호·전화·이메일 등)는 답변에 노출하지 마세요.",
     contexts.length ? "참고 자료:\\n" + contexts.join("\\n---\\n") : "",
   ]
     .filter(Boolean)
@@ -1545,6 +1547,8 @@ function buildSystemPrompt(contexts: string[]): string {
     "당신은 OO광역시의 안내 챗봇입니다.",
     "톤: formal. 한국어로 정중히 답합니다.",
     GROUNDED_ONLY ? "제공된 근거에 없는 내용은 추측하지 마세요." : "",
+    "답변이 불가능하면 정중히 사과하고 가능한 대안을 안내하세요.",
+    "개인정보(주민등록번호·전화·이메일 등)는 답변에 노출하지 마세요.",
     contexts.length ? "참고 자료:\\n" + contexts.join("\\n---\\n") : "",
   ]
     .filter(Boolean)

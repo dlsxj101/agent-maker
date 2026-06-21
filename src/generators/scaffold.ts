@@ -267,6 +267,21 @@ ${traceEmit}  let full = "";
 `
     : "";
 
+  // 시스템 프롬프트에 주입할 안전 정책 (거절 스타일 · 금칙 주제 · PII)
+  const refusalMap: Record<string, string> = {
+    polite: "정중히 사과하고 가능한 대안을 안내하세요",
+    brief: "간결히 답변할 수 없음을 알리세요",
+    redirect: "담당 부서나 적절한 채널로 안내하세요",
+    strict: "관련 규정을 근거로 명확히 거절하세요",
+  };
+  const banned = spec.llm.guardrails.bannedTopics;
+  const safetyLines =
+    `    "답변이 불가능하면 ${refusalMap[spec.agent.safety.refusalStyle]}.",\n` +
+    (banned && banned.length ? `    "다음 주제는 정중히 거절하세요: ${banned.join(", ")}.",\n` : "") +
+    (spec.llm.guardrails.piiFilter
+      ? `    "개인정보(주민등록번호·전화·이메일 등)는 답변에 노출하지 마세요.",\n`
+      : "");
+
   return `// 채팅 오케스트레이션: (RAG 검색)${toolAgent ? " + 도구 호출 루프" : ""} → LLM${streaming ? " (스트리밍)" : ""}.
 // 동작: ${it.agentMode} / 멀티턴: ${multiTurn} / 스트리밍: ${streaming} / 인용: "${it.rendering.citationStyle}".
 // 안전: 거절 "${spec.agent.safety.refusalStyle}"${masking ? " · PII 마스킹" : ""}.
@@ -305,7 +320,7 @@ function buildSystemPrompt(contexts: string[]): string {
     "당신은 ${spec.project.org || "공공기관"}의 안내 챗봇입니다.",
     "톤: ${spec.conversation.persona.tone}. 한국어로 정중히 답합니다.",
     GROUNDED_ONLY ? "제공된 근거에 없는 내용은 추측하지 마세요." : "",
-    contexts.length ? "참고 자료:\\n" + contexts.join("\\n---\\n") : "",
+${safetyLines}    contexts.length ? "참고 자료:\\n" + contexts.join("\\n---\\n") : "",
   ]
     .filter(Boolean)
     .join("\\n");

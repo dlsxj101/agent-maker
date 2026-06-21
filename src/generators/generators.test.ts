@@ -73,6 +73,17 @@ describe("generateArtifacts — 파일 구성", () => {
     expect(m["src/server.ts"]).toContain("너무 깁니다");
   });
 
+  it("가드레일(거절 스타일·금칙 주제·PII)이 시스템 프롬프트에 주입된다", () => {
+    const spec = {
+      ...cloudSpec,
+      llm: { ...cloudSpec.llm, guardrails: { ...cloudSpec.llm.guardrails, bannedTopics: ["정치", "투자권유"] } },
+    };
+    const chat = fileMap(generateArtifacts(spec, { now: FIXED_NOW }))["src/chat.ts"];
+    expect(chat).toContain("답변이 불가능하면"); // 거절 스타일 지시
+    expect(chat).toContain("정치, 투자권유"); // 금칙 주제
+    expect(chat).toContain("개인정보"); // PII 필터(기본 on)
+  });
+
   it("폐쇄망 음성+접근제어 프로필: PROMPT 반영 + 온프레미스 음성 충돌 없음", () => {
     const m = fileMap(generateArtifacts(voiceSpec, { now: FIXED_NOW }));
     expect(m["PROMPT.md"]).toContain("음성");
