@@ -210,8 +210,8 @@ function chatTs(spec: AgentSpec): string {
 
   const imports = [
     rag ? `import { search } from "./rag/pipeline.js";` : "",
-    `import { complete${streaming ? ", completeStream" : ""}, type Msg } from "./llm/client.js";`,
-    toolAgent ? `import { TOOLS } from "./tools.js";` : "",
+    `import { complete${streaming ? ", completeStream" : ""}${toolAgent ? ", completeWithTools" : ""}, type Msg } from "./llm/client.js";`,
+    toolAgent ? `import { TOOLS, TOOL_DEFS } from "./tools.js";` : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -220,13 +220,15 @@ function chatTs(spec: AgentSpec): string {
     ? `  const contexts: string[] = chunks.map((c) => c.text);\n  const sources: string[] = chunks.map((c) => (c.page ? c.source + " p." + c.page : c.source));\n`
     : `  const contexts: string[] = [];\n  const sources: string[] = [];\n`;
   const ragSearch = rag ? `  const chunks = await search(message);\n` : "";
+  // dev/STUB 에서만 도구를 미리 실행(시뮬레이션). 실서비스(비STUB)는 completeWithTools 가 LLM 주도로 구동.
   const toolLines = toolAgent
-    ? `  // tool-agent: 도구를 최대 ${maxSteps}회 호출해 컨텍스트를 보강. (TODO: 실제 LLM tool-use 로 도구/인자 선택)\n` +
-      `  for (const name of Object.keys(TOOLS).slice(0, ${maxSteps})) {\n` +
-      `    const result = await TOOLS[name]({ query: message });\n` +
-      `    contexts.push("[tool:" + name + "] " + JSON.stringify(result));\n` +
-      `    sources.push("tool:" + name);\n` +
-      `    traces.push({ tool: name, result });\n` +
+    ? `  if (STUB) {\n` +
+      `    for (const name of Object.keys(TOOLS).slice(0, MAX_STEPS)) {\n` +
+      `      const result = await TOOLS[name]({ query: message });\n` +
+      `      contexts.push("[tool:" + name + "] " + JSON.stringify(result));\n` +
+      `      sources.push("tool:" + name);\n` +
+      `      traces.push({ tool: name, result });\n` +
+      `    }\n` +
       `  }\n`
     : "";
 
@@ -258,8 +260,16 @@ export async function* answerStream(message: string, sessionId?: string): AsyncG
 ${traceEmit}  let full = "";
   if (STUB) {
     for (const tok of stubAnswer(message, contexts).split(/(\\s+)/)) { full += tok; yield { delta: tok }; }
-  } else {
+  }${
+    toolAgent
+      ? ` else {
+    // tool-use 는 토큰 스트림이 아니므로 루프 완료 후 한 번에 전송한다.
+    full = await completeWithTools(system, messages, TOOL_DEFS, TOOLS, MAX_STEPS);
+    yield { delta: full };
+  }`
+      : ` else {
     for await (const d of completeStream(system, messages)) { full += d; yield { delta: d }; }
+  }`
   }
   saveHistory(sessionId, messages, ${safe("full")});
   yield { sources };
@@ -289,7 +299,7 @@ ${imports}
 
 const GROUNDED_ONLY = ${spec.llm.guardrails.groundedOnly}; // 근거 기반 답변 강제
 const STUB = process.env.LLM_STUB === "true"; // 테스트/오프라인: 실제 LLM 호출 없이 결정적 스텁
-${sessionDecl}
+${toolAgent ? `const MAX_STEPS = ${maxSteps}; // tool-agent 루프 최대 반복\n` : ""}${sessionDecl}
 export interface ChatResult { answer: string; sources: string[]; }
 
 // 컨텍스트 구성: RAG 검색${toolAgent ? " + 도구 호출(trace 수집)" : ""}
@@ -302,7 +312,9 @@ export async function answer(message: string, sessionId?: string): Promise<ChatR
   const { contexts, sources } = await gather(message);
   const system = buildSystemPrompt(contexts);
   const messages: Msg[] = [...loadHistory(sessionId), { role: "user", content: message }];
-  const raw = STUB ? stubAnswer(message, contexts) : await complete(system, messages);
+  const raw = STUB
+    ? stubAnswer(message, contexts)
+    : ${toolAgent ? "await completeWithTools(system, messages, TOOL_DEFS, TOOLS, MAX_STEPS)" : "await complete(system, messages)"};
   const answerText = ${safe("raw")};
   saveHistory(sessionId, messages, answerText);
   return { answer: answerText, sources };
@@ -368,7 +380,51 @@ ${defs}
 
 function llmClientTs(spec: AgentSpec): string {
   const stream = spec.interaction.streaming.enabled;
+  const toolAgent = spec.interaction.agentMode === "tool-agent";
   if (spec.llm.provider === "claude" && spec.llm.serving === "official-api") {
+    const toolFn = toolAgent
+      ? `
+export type ToolExec = Record<string, (args: Record<string, unknown>) => Promise<unknown>>;
+export interface ToolDef { name: string; description: string; input_schema: unknown; }
+
+/** LLM tool-use 루프 — stop_reason==="tool_use" 면 도구 실행→tool_result 회신→반복(최대 maxSteps). */
+export async function completeWithTools(
+  system: string,
+  base: Msg[],
+  tools: readonly ToolDef[],
+  exec: ToolExec,
+  maxSteps: number,
+): Promise<string> {
+  const messages: Anthropic.MessageParam[] = base.map((m) => ({ role: m.role, content: m.content }));
+  for (let step = 0; step < maxSteps; step++) {
+    const res = await client().messages.create({
+      model: MODEL,
+      max_tokens: ${spec.llm.params.maxTokens},
+      temperature: ${spec.llm.params.temperature},
+      system,
+      tools: tools as unknown as Anthropic.Tool[],
+      messages,
+    });
+    if (res.stop_reason === "tool_use") {
+      messages.push({ role: "assistant", content: res.content as unknown as Anthropic.MessageParam["content"] });
+      const results: unknown[] = [];
+      for (const block of res.content) {
+        if (block.type === "tool_use") {
+          const fn = exec[block.name];
+          const out = fn ? await fn(block.input as Record<string, unknown>) : { error: "unknown tool" };
+          results.push({ type: "tool_result", tool_use_id: block.id, content: JSON.stringify(out) });
+        }
+      }
+      messages.push({ role: "user", content: results as unknown as Anthropic.MessageParam["content"] });
+      continue;
+    }
+    const text = res.content.find((b) => b.type === "text");
+    return text && text.type === "text" ? text.text : "";
+  }
+  return "(최대 도구 호출 횟수를 초과했습니다.)";
+}
+`
+      : "";
     const streamFn = stream
       ? `
 /** 스트리밍 — 토큰 델타를 순차 yield (streaming.enabled=true) */
@@ -407,7 +463,7 @@ export async function complete(system: string, messages: Msg[]): Promise<string>
   const block = res.content[0];
   return block && block.type === "text" ? block.text : "";
 }
-${streamFn}`;
+${streamFn}${toolFn}`;
   }
   // 프록시/사내추론/오픈소스: OpenAI 호환 엔드포인트 가정
   const streamFnCompat = stream
@@ -458,7 +514,18 @@ export async function complete(system: string, messages: Msg[]): Promise<string>
   const data = await res.json();
   return data?.choices?.[0]?.message?.content ?? "";
 }
-${streamFnCompat}`;
+${streamFnCompat}${
+    toolAgent
+      ? `
+export type ToolExec = Record<string, (args: Record<string, unknown>) => Promise<unknown>>;
+export interface ToolDef { name: string; description: string; input_schema: unknown; }
+// OpenAI 호환 tool-use(function calling) 루프 — TODO: tools 파라미터로 구현. 임시: 단순 complete.
+export async function completeWithTools(system: string, base: Msg[], _tools: readonly ToolDef[], _exec: ToolExec, _maxSteps: number): Promise<string> {
+  return complete(system, base);
+}
+`
+      : ""
+  }`;
 }
 
 function ragPipelineTs(spec: AgentSpec): string {

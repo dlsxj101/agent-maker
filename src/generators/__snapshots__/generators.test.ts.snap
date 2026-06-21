@@ -650,7 +650,9 @@ export async function answer(message: string, sessionId?: string): Promise<ChatR
   const { contexts, sources } = await gather(message);
   const system = buildSystemPrompt(contexts);
   const messages: Msg[] = [...loadHistory(sessionId), { role: "user", content: message }];
-  const raw = STUB ? stubAnswer(message, contexts) : await complete(system, messages);
+  const raw = STUB
+    ? stubAnswer(message, contexts)
+    : await complete(system, messages);
   const answerText = maskPii(raw);
   saveHistory(sessionId, messages, answerText);
   return { answer: answerText, sources };
@@ -1575,7 +1577,9 @@ export async function answer(message: string, sessionId?: string): Promise<ChatR
   const { contexts, sources } = await gather(message);
   const system = buildSystemPrompt(contexts);
   const messages: Msg[] = [...loadHistory(sessionId), { role: "user", content: message }];
-  const raw = STUB ? stubAnswer(message, contexts) : await complete(system, messages);
+  const raw = STUB
+    ? stubAnswer(message, contexts)
+    : await complete(system, messages);
   const answerText = maskPii(raw);
   saveHistory(sessionId, messages, answerText);
   return { answer: answerText, sources };

@@ -376,6 +376,8 @@ AgentSpec {
 - **tool-agent**(`agentMode=tool-agent`): `src/tools.ts`(integrations.tools→스텁 레지스트리) + `chat.ts` 도구 호출 루프(maxSteps), 결과를 컨텍스트/출처에 누적.
 - **tool-agent trace**: `gather()`가 도구 trace 수집 → `answerStream`이 답변 전 `{trace}` SSE 이벤트 전송(toolCallDisplay≠hidden), `app.js` trace 말풍선 렌더. 런타임 확인.
 - **가드레일 주입**: `buildSystemPrompt`에 거절 스타일·금칙 주제(`bannedTopics`)·PII 정책을 실제 주입(기존엔 톤/근거만).
+- **RAG 파이프라인 실동작**: `ingest`(파일 읽기)/`chunk`(문단+크기+오버랩)/`index`(인메모리)/`search`(색인+코퍼스) — throw 스텁 제거, 런타임 E2E 확인. 출처 칩 UI(`app.js`).
+- **실 LLM tool-use 루프**: `completeWithTools`(Claude `tools`→`stop_reason:tool_use`→`tool_result` 왕복, 최대 maxSteps) — **생성물이 실제 Anthropic SDK 타입에 tsc 통과**(런타임은 키 필요, 미검증). STUB 경로는 gather 시뮬레이션 유지. (게이트가 SDK 타입 불일치 `ContentBlockParam` 미export 를 잡아 인덱스 접근 타입으로 수정)
 - 4프로필(cloud/airgap/toolagent/voice) **tsc 클린 빌드 + 골든셋 + 런타임 스모크(SSE 토큰/trace 스트림, tool-agent 도구호출, confirm, 가드) 통과**.
 
 **export-verify E2E 게이트 로그 (2026-06-21):**
