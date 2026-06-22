@@ -404,7 +404,15 @@ AgentSpec {
     Express(기본)·**Fastify**·**NestJS**. Go: net/http(기본)·**Gin**·**Echo**. Java: Spring Boot(카탈로그 단일).
     검증: Python `py_compile`(3종)·Node `tsc`(fastify/nestjs 실제 의존성 설치)·Go `go mod tidy`+`vet`+`test`(gin/echo).
     기본 프레임워크 출력은 바이트 동일(스냅샷 무변동). 단위 테스트 +7(총 72).
-  - 🏁 **M7 완료**: B/0/A/D/C + 깊이 갭 해소(전 스택 tool-use·스트리밍 풀) + 프레임워크 변형(런타임×프레임워크). 남은 항목(마법사 UI 라벨 다국어)은 백로그.
+  - ✅ **옵션 전수 재감사 + 공백 보강(2026-06-22, 사용자 요청)**: 14개 섹션 전수 점검 결과 distinct 공백 3건 확인·보강.
+    ① **세션 영속/재개**(`llm.session.persistence` in-memory/redis/db + `resumable`) — "이탈 후 돌아와 대화 이어가기".
+       스캐폴드 반영: **프론트엔드(공유)가 resumable 시 sessionId 를 localStorage 에 보관**(전 스택 즉시 효과) +
+       Node 세션 주석/PROMPT 가 영속 백엔드(REDIS_URL/DATABASE_URL) 구현을 지시. 충돌 C20(resumable+인메모리)·C21(저장소 미구성).
+    ② **운영 시간**(`conversation.fallback.operatingHours`) — offHoursMessage 와 짝, PROMPT 반영.
+    ③ **모델 폴백/failover**(`llm.fallbackModel`) — 1차 모델 실패·과부하 시 전환, PROMPT 반영.
+    나머지 후보(쿼리 재작성/메타데이터 필터/CORS/백업 등)는 런타임 구현 디테일로 재확인(PROMPT 가 처리, §9 포화 판단 유지).
+    UI(LlmStep·ConversationStep)·spec-schema·단위 테스트(+8, 총 80) 반영.
+  - 🏁 **M7 완료**: B/0/A/D/C + 깊이 갭 해소 + 프레임워크 변형 + 옵션 재감사/보강(세션 영속·운영시간·폴백). 남은 항목(마법사 UI 라벨 다국어)은 백로그.
 
 > **검증 루프 요약** (제품의 본질이므로 로드맵에 명시):
 > - 자동: 골든 산출물 스냅샷 테스트 · `AgentSpec` round-trip · 충돌 규칙 단위 테스트

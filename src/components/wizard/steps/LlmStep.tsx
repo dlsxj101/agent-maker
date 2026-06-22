@@ -6,7 +6,7 @@
 
 import { useWizardStore } from "@/lib/store";
 import { LLM_PROVIDER_CATALOG, modelsByProvider } from "@/catalog";
-import { LLM_PROVIDERS, LLM_SERVINGS } from "@/lib/agent-spec";
+import { LLM_PROVIDERS, LLM_SERVINGS, SESSION_PERSISTENCE } from "@/lib/agent-spec";
 import { OptionCards, NumberField, ToggleField } from "../controls";
 
 /** 호출 방식(serving) 별 한국어 설명 */
@@ -70,6 +70,18 @@ export function LlmStep() {
         }))}
         columns={2}
       />
+      {/* 폴백 모델 — 1차 모델 실패/과부하 시 전환 */}
+      <OptionCards
+        label="폴백 모델 (선택)"
+        value={llm.fallbackModel ?? ""}
+        onChange={(v) => update("llm", { fallbackModel: v || undefined })}
+        options={[
+          { id: "", label: "사용 안 함" },
+          ...models.filter((m) => m.id !== llm.model).map((m) => ({ id: m.id, label: m.label })),
+        ]}
+        columns={2}
+        hint="1차 모델 호출 실패·과부하 시 이 모델로 전환합니다."
+      />
       {/* 호출 방식 선택 — 폐쇄망 여부에 따라 self-hosted 권장 */}
       <OptionCards
         label="호출 방식"
@@ -116,6 +128,29 @@ export function LlmStep() {
         checked={llm.session.multiTurn}
         onChange={(v) => update("llm", { session: { ...llm.session, multiTurn: v } })}
       />
+
+      {/* 세션 영속 / 재개 — 이탈 후 돌아와 대화 이어가기 */}
+      <fieldset className="space-y-2 rounded-md border border-border p-3">
+        <legend className="px-1 text-xs font-medium text-muted">세션 영속 / 재개</legend>
+        <OptionCards
+          label="세션 저장 백엔드"
+          columns={3}
+          value={llm.session.persistence}
+          onChange={(v) =>
+            update("llm", { session: { ...llm.session, persistence: v as (typeof SESSION_PERSISTENCE)[number] } })
+          }
+          options={[
+            { id: "in-memory", label: "인메모리", description: "재시작 시 소실(개발/단순)" },
+            { id: "redis", label: "Redis", description: "빠른 세션 공유(영속)" },
+            { id: "db", label: "DB", description: "관계형 DB에 영속" },
+          ]}
+        />
+        <ToggleField
+          label="이탈 후 재방문 시 대화 이어가기 (resumable)"
+          checked={llm.session.resumable}
+          onChange={(v) => update("llm", { session: { ...llm.session, resumable: v } })}
+        />
+      </fieldset>
 
       <NumberField
         label="월 예상 질의 수 (비용 추정용)"

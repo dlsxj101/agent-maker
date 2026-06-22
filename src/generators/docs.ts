@@ -134,14 +134,29 @@ export function renderPromptMd(spec: AgentSpec): string {
     ? s.prompt.step_llm_multiturn(spec.llm.session.historyTurns)
     : "";
   const streamNote = spec.interaction.streaming.enabled ? s.prompt.step_llm_stream : "";
+  // 세션 영속/재개 (persistence≠in-memory 또는 resumable 일 때만)
+  const sess = spec.llm.session;
+  const persistenceKo: Record<string, string> = { "in-memory": "인메모리", redis: "Redis", db: "DB" };
+  const sessionNote =
+    sess.resumable || sess.persistence !== "in-memory"
+      ? lang === "en"
+        ? ` Session persistence: store sessions in ${sess.persistence} (env: REDIS_URL / DATABASE_URL)${sess.resumable ? ". Make conversations resumable across visits — key on a persisted sessionId (the client keeps it in localStorage), so a returning user continues the same conversation" : ""}.`
+        : ` 세션 영속: 세션을 ${persistenceKo[sess.persistence]}에 저장한다(env: REDIS_URL / DATABASE_URL)${sess.resumable ? ". 재방문 시 같은 sessionId(클라이언트가 localStorage 에 보관)로 대화를 재개해, 이탈 후 돌아와도 이어지게 한다" : ""}.`
+      : "";
+  // 모델 폴백/failover
+  const failoverNote = spec.llm.fallbackModel
+    ? lang === "en"
+      ? ` On primary-model failure or overload, fall back to ${modelLabel(spec.llm.fallbackModel)}.`
+      : ` 1차 모델 실패·과부하 시 ${modelLabel(spec.llm.fallbackModel)}(으)로 폴백한다.`
+    : "";
 
   if (lang === "en") {
     steps.push(
-      `${n++}. **Integrate LLM**: ${llmProvider} / model ${modelLabel(spec.llm.model)} / serving ${llmServing}. System prompt tone: ${llmTone}. Guardrails: grounded-only ${yesno(spec.llm.guardrails.groundedOnly, lang)}, PII filter ${yesno(spec.llm.guardrails.piiFilter, lang)}.${multiturnNote}${streamNote}`,
+      `${n++}. **Integrate LLM**: ${llmProvider} / model ${modelLabel(spec.llm.model)} / serving ${llmServing}. System prompt tone: ${llmTone}. Guardrails: grounded-only ${yesno(spec.llm.guardrails.groundedOnly, lang)}, PII filter ${yesno(spec.llm.guardrails.piiFilter, lang)}.${multiturnNote}${streamNote}${sessionNote}${failoverNote}`,
     );
   } else {
     steps.push(
-      `${n++}. **LLM 연동**: ${llmProvider} / 모델 ${modelLabel(spec.llm.model)} / 호출 방식 ${llmServing}. 시스템 프롬프트는 ${llmTone} 톤. 가드레일: 근거기반 ${yesno(spec.llm.guardrails.groundedOnly, lang)}, 민감정보 필터 ${yesno(spec.llm.guardrails.piiFilter, lang)}.${multiturnNote}${streamNote}`,
+      `${n++}. **LLM 연동**: ${llmProvider} / 모델 ${modelLabel(spec.llm.model)} / 호출 방식 ${llmServing}. 시스템 프롬프트는 ${llmTone} 톤. 가드레일: 근거기반 ${yesno(spec.llm.guardrails.groundedOnly, lang)}, 민감정보 필터 ${yesno(spec.llm.guardrails.piiFilter, lang)}.${multiturnNote}${streamNote}${sessionNote}${failoverNote}`,
     );
   }
 
@@ -161,13 +176,22 @@ export function renderPromptMd(spec: AgentSpec): string {
         )
       : "";
 
+  // 운영 시간 + 운영시간 외 안내
+  const oh = spec.conversation.fallback.operatingHours;
+  const offMsg = spec.conversation.fallback.offHoursMessage;
+  const hoursNote = oh
+    ? lang === "en"
+      ? ` Operating hours: ${oh}${offMsg ? `; outside these hours respond with "${offMsg}"` : ""}.`
+      : ` 운영 시간: ${oh}${offMsg ? `; 운영 시간 외에는 "${offMsg}"로 안내한다` : ""}.`
+    : "";
+
   if (lang === "en") {
     steps.push(
-      `${n++}. **Implement conversation design**: persona, intents, quick replies, and fallback (${fallbackLabel}).${s.prompt.step_conv_noIntent}${handoffNote}`,
+      `${n++}. **Implement conversation design**: persona, intents, quick replies, and fallback (${fallbackLabel}).${s.prompt.step_conv_noIntent}${handoffNote}${hoursNote}`,
     );
   } else {
     steps.push(
-      `${n++}. **대화 설계 반영**: 페르소나/인텐트/빠른응답/폴백(${fallbackLabel})을 구현한다.${s.prompt.step_conv_noIntent}${handoffNote}`,
+      `${n++}. **대화 설계 반영**: 페르소나/인텐트/빠른응답/폴백(${fallbackLabel})을 구현한다.${s.prompt.step_conv_noIntent}${handoffNote}${hoursNote}`,
     );
   }
 

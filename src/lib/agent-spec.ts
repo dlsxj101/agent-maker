@@ -106,6 +106,8 @@ export const RETRIEVAL_STRATEGIES = ["vector", "hybrid"] as const;
 
 export const LLM_PROVIDERS = ["claude", "openai", "opensource"] as const;
 export const LLM_SERVINGS = ["official-api", "proxy", "self-hosted"] as const;
+// 세션 저장 백엔드 — 이탈 후 재방문 대화 재개(resumable)에 필요. (M7 후속)
+export const SESSION_PERSISTENCE = ["in-memory", "redis", "db"] as const;
 
 export const PERSONA_TONES = ["formal", "concise", "friendly"] as const;
 export const FALLBACK_ON_UNKNOWN = ["apologize", "rephrase", "handoff"] as const;
@@ -363,12 +365,17 @@ const LlmSchema = z
       })
       .prefault({}),
     routing: z.boolean().optional(), // 비용/난이도 기반 모델 라우팅
+    fallbackModel: z.string().optional(), // 1차 모델 실패/과부하 시 폴백 모델 (catalog)
     session: z
       .object({
         multiTurn: z.boolean().default(true),
         historyTurns: z.number().optional(),
         contextWindow: z.number().optional(),
         timeoutMin: z.number().optional(),
+        // 세션 저장 백엔드: in-memory(휘발) / redis / db. resumable 보장하려면 redis·db.
+        persistence: z.enum(SESSION_PERSISTENCE).default("in-memory"),
+        // 이탈 후 재방문 시 같은 sessionId로 대화를 이어서 재개한다.
+        resumable: z.boolean().default(false),
       })
       .prefault({}),
     budget: z
@@ -409,7 +416,8 @@ const ConversationSchema = z
         handoff: z.enum(HANDOFF_MODES).optional(),
         handoffSlaMin: z.number().optional(), // 상담사 연결 목표 응답시간(분)
         showQueue: z.boolean().default(false), // 대기열 순번/예상 대기시간 표시
-        offHoursMessage: z.string().optional(),
+        operatingHours: z.string().optional(), // 운영 시간(예: "평일 09:00-18:00")
+        offHoursMessage: z.string().optional(), // 운영 시간 외 안내
       })
       .prefault({}),
     i18n: z

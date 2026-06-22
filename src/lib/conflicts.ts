@@ -230,5 +230,29 @@ export function detectConflicts(spec: AgentSpec): Conflict[] {
     });
   }
 
+  // C20: 재방문 재개를 켰는데 세션 저장이 인메모리(휘발)
+  if (spec.llm.session.resumable && spec.llm.session.persistence === "in-memory") {
+    out.push({
+      id: "C20",
+      section: "llm",
+      message: "이탈 후 대화 재개(resumable)를 켰는데 세션 저장이 인메모리입니다. 재시작 시 소실되니 Redis 또는 DB 영속화를 권장합니다.",
+    });
+  }
+
+  // C21: 세션 영속 백엔드를 골랐는데 그 저장소가 구성돼 있지 않음
+  if (spec.llm.session.persistence === "redis" && spec.database.cache !== "redis") {
+    out.push({
+      id: "C21",
+      section: "llm",
+      message: "세션을 Redis에 저장하려면 데이터베이스 단계에서 캐시를 Redis로 설정해야 합니다.",
+    });
+  } else if (spec.llm.session.persistence === "db" && spec.database.history === "none") {
+    out.push({
+      id: "C21",
+      section: "llm",
+      message: "세션을 DB에 저장하려면 데이터베이스 단계에서 대화 이력 저장소(same-as-rdb/separate)를 설정해야 합니다.",
+    });
+  }
+
   return out;
 }

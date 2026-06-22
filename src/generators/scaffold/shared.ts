@@ -68,9 +68,12 @@ function chatUiHtml(spec: AgentSpec): string {
 
 function chatUiJs(spec: AgentSpec): string {
   const streaming = spec.interaction.streaming.enabled;
-  const session = spec.llm.session.multiTurn
-    ? `const SESSION_ID = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now());\n`
-    : `const SESSION_ID = undefined;\n`;
+  const session = !spec.llm.session.multiTurn
+    ? `const SESSION_ID = undefined;\n`
+    : spec.llm.session.resumable
+      ? // 재방문 재개(resumable): sessionId 를 localStorage 에 보관해 새로고침/재방문에도 같은 대화를 잇는다.
+        `const SESSION_ID = (() => {\n  let id = localStorage.getItem("chat_session");\n  if (!id) { id = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now()); localStorage.setItem("chat_session", id); }\n  return id;\n})();\n`
+      : `const SESSION_ID = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now());\n`;
   const handler = streaming
     ? `form.addEventListener("submit", async (e) => {
   e.preventDefault();

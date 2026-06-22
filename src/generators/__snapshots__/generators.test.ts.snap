@@ -360,7 +360,9 @@ OO부 정보화담당관 챗봇 프로젝트.
       "piiFilter": true
     },
     "session": {
-      "multiTurn": true
+      "multiTurn": true,
+      "persistence": "in-memory",
+      "resumable": false
     }
   },
   "conversation": {
@@ -1275,7 +1277,9 @@ OO광역시 민원봉사과 챗봇 프로젝트.
       "piiFilter": true
     },
     "session": {
-      "multiTurn": true
+      "multiTurn": true,
+      "persistence": "in-memory",
+      "resumable": false
     }
   },
   "conversation": {
@@ -2204,7 +2208,9 @@ OO광역시 민원봉사과 chatbot project.
       "piiFilter": true
     },
     "session": {
-      "multiTurn": true
+      "multiTurn": true,
+      "persistence": "in-memory",
+      "resumable": false
     }
   },
   "conversation": {

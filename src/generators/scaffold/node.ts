@@ -245,8 +245,12 @@ function chatTs(spec: AgentSpec): string {
       `  }\n`
     : "";
 
+  const persistNote =
+    spec.llm.session.persistence !== "in-memory" || spec.llm.session.resumable
+      ? ` (spec: persistence=${spec.llm.session.persistence}${spec.llm.session.resumable ? ", resumable" : ""} → ${spec.llm.session.persistence === "redis" ? "REDIS_URL" : "DATABASE_URL"} 로 영속 스토어 구현, PROMPT 참조)`
+      : "";
   const sessionDecl = multiTurn
-    ? `\n// 멀티턴 세션 — sessionId 별 대화 이력(메모리). 운영은 DB/Redis 로 대체.\nconst SESSIONS = new Map<string, Msg[]>();\nconst HISTORY_MSGS = ${histMsgs};\nfunction loadHistory(id?: string): Msg[] { return id ? SESSIONS.get(id) ?? [] : []; }\nfunction saveHistory(id: string | undefined, messages: Msg[], answerText: string): void {\n  if (!id) return;\n  const updated: Msg[] = [...messages, { role: "assistant", content: answerText }];\n  SESSIONS.set(id, updated.slice(-HISTORY_MSGS));\n}\n`
+    ? `\n// 멀티턴 세션 — sessionId 별 대화 이력(메모리). 운영은 DB/Redis 로 대체.${persistNote}\nconst SESSIONS = new Map<string, Msg[]>();\nconst HISTORY_MSGS = ${histMsgs};\nfunction loadHistory(id?: string): Msg[] { return id ? SESSIONS.get(id) ?? [] : []; }\nfunction saveHistory(id: string | undefined, messages: Msg[], answerText: string): void {\n  if (!id) return;\n  const updated: Msg[] = [...messages, { role: "assistant", content: answerText }];\n  SESSIONS.set(id, updated.slice(-HISTORY_MSGS));\n}\n`
     : `\nfunction loadHistory(_id?: string): Msg[] { return []; }\nfunction saveHistory(_id: string | undefined, _m: Msg[], _a: string): void {}\n`;
 
   const maskUtil = masking

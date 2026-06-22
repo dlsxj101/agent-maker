@@ -213,11 +213,14 @@ llm: {
     bannedTopics?: string[]            # 거절 정책
   }
   routing?: boolean                    # 비용/난이도 기반 모델 라우팅
+  fallbackModel?: string               # (catalog) 1차 모델 실패/과부하 시 폴백 모델
   session: {                           # 멀티턴/세션·컨텍스트 정책
     multiTurn: boolean                 # 멀티턴 기억 사용
     historyTurns?: number              # 기억할 직전 턴 수
     contextWindow?: number             # 컨텍스트 윈도우 관리(토큰)
     timeoutMin?: number                # 세션 만료/타임아웃(분)
+    persistence: enum{ in-memory | redis | db }   # 세션 저장 백엔드(기본 in-memory, 휘발)
+    resumable: boolean                 # 이탈 후 재방문 시 같은 sessionId로 대화 재개
   }
   budget?: {                           # 비용 추정 입력 (운영 §12와 연계)
     estMonthlyQueries?: number         # 월 예상 질의 수
@@ -256,6 +259,7 @@ conversation: {
     handoff?: enum{ none | human-agent | phone | email } # 상담원 전환 수단
     handoffSlaMin?: number               # 상담사 연결 목표 응답시간(분)
     showQueue: boolean                   # 대기열 순번/예상 대기시간 표시
+    operatingHours?: string            # 운영 시간(예: "평일 09:00-18:00")
     offHoursMessage?: string           # 운영시간 외 안내
   }
   i18n?: {                             # 다국어 응답 정책 (project.languages와 정합)
@@ -488,6 +492,8 @@ ops: {
 | C17 | `backend.network=offline` + 외부 채널(kakao/slack/teams) | 웹/앱 위주 권고(외부망 연동 필요) |
 | C18 | `backend.network=offline` + `ops.observability.analytics=ga` | 자체 호스팅 분석(matomo/self-hosted) 권고 |
 | C19 | `rag.accessControl≠none` + `frontend.userAuth=none` | 권한 검색에 필요한 이용자 본인확인 설정 권고 |
+| C20 | `llm.session.resumable=true` + `persistence=in-memory` | 재시작 시 소실 — Redis/DB 영속화 권고 |
+| C21 | `persistence=redis` + `database.cache≠redis` / `persistence=db` + `database.history=none` | 세션 저장소(Redis/이력 DB) 구성 권고 |
 
 ### Export 차단 게이트 (검토 반영)
 

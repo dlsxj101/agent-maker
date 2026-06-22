@@ -149,6 +149,27 @@ describe("detectConflicts", () => {
     expect(got).not.toContain("C1"); // bge-m3 = 온프레미스 임베딩
     expect(got).not.toContain("C2"); // self-hosted
   });
+
+  it("resumable + 인메모리 세션이면 C20 을 잡는다", () => {
+    const spec = createDraftSpec({ llm: { session: { resumable: true, persistence: "in-memory" } } });
+    expect(ids(spec)).toContain("C20");
+  });
+
+  it("세션 persistence=redis 인데 캐시가 redis 가 아니면 C21 을 잡는다", () => {
+    const spec = createDraftSpec({
+      llm: { session: { persistence: "redis" } },
+      database: { cache: "none" },
+    });
+    expect(ids(spec)).toContain("C21");
+  });
+
+  it("세션 persistence=redis + database.cache=redis 면 C21 없음", () => {
+    const spec = createDraftSpec({
+      llm: { session: { persistence: "redis" } },
+      database: { cache: "redis" },
+    });
+    expect(ids(spec)).not.toContain("C21");
+  });
 });
 
 describe("getMissingRequired / isExportReady", () => {

@@ -217,6 +217,39 @@ describe("스택별 프레임워크 변형 (M7-D 후속)", () => {
   });
 });
 
+describe("세션 영속/재개 · 폴백 · 운영시간 (M7 후속)", () => {
+  it("resumable → 프론트엔드가 sessionId 를 localStorage 에 보관(이탈 후 재개)", () => {
+    const spec = createDraftSpec({ llm: { session: { resumable: true } } });
+    const js = fileMap(generateArtifacts(spec, { now: FIXED_NOW }))["public/app.js"];
+    expect(js).toContain("localStorage.getItem(\"chat_session\")");
+  });
+
+  it("기본(resumable=false) → localStorage 미사용(스냅샷 안정)", () => {
+    const js = fileMap(generateArtifacts(cloudSpec, { now: FIXED_NOW }))["public/app.js"];
+    expect(js).not.toContain("chat_session");
+  });
+
+  it("persistence=redis / resumable → PROMPT 와 Node 세션 주석에 영속 지시", () => {
+    const spec = createDraftSpec({ llm: { session: { resumable: true, persistence: "redis" } } });
+    const m = fileMap(generateArtifacts(spec, { now: FIXED_NOW }));
+    expect(m["PROMPT.md"]).toContain("세션 영속");
+    expect(m["PROMPT.md"]).toContain("재개");
+    expect(m["src/chat.ts"]).toContain("persistence=redis");
+  });
+
+  it("fallbackModel → PROMPT 에 폴백 지시", () => {
+    const spec = createDraftSpec({ llm: { model: "claude-sonnet-4-6", fallbackModel: "claude-haiku-4-5" } });
+    expect(fileMap(generateArtifacts(spec, { now: FIXED_NOW }))["PROMPT.md"]).toContain("폴백");
+  });
+
+  it("operatingHours → PROMPT 에 운영 시간 지시", () => {
+    const spec = createDraftSpec({
+      conversation: { fallback: { operatingHours: "평일 09:00-18:00" } },
+    });
+    expect(fileMap(generateArtifacts(spec, { now: FIXED_NOW }))["PROMPT.md"]).toContain("운영 시간: 평일 09:00-18:00");
+  });
+});
+
 describe("결정성", () => {
   it("동일 spec + 동일 now → 완전히 동일한 산출", () => {
     const a = generateArtifacts(cloudSpec, { now: FIXED_NOW });

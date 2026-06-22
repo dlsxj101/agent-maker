@@ -181,6 +181,20 @@ export function ConversationStep() {
           />
         </>
       )}
+
+      {/* 운영 시간 + 운영시간 외 안내 */}
+      <TextField
+        label="운영 시간 (선택)"
+        value={conv.fallback.operatingHours ?? ""}
+        onChange={(v) => update("conversation", { fallback: { ...conv.fallback, operatingHours: v || undefined } })}
+        placeholder="예: 평일 09:00-18:00 (주말·공휴일 휴무)"
+      />
+      <TextField
+        label="운영 시간 외 안내 문구 (선택)"
+        value={conv.fallback.offHoursMessage ?? ""}
+        onChange={(v) => update("conversation", { fallback: { ...conv.fallback, offHoursMessage: v || undefined } })}
+        placeholder="예: 지금은 운영 시간이 아닙니다. 평일 09시 이후 다시 문의해 주세요."
+      />
     </div>
   );
 }
