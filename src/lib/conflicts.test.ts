@@ -170,6 +170,20 @@ describe("detectConflicts", () => {
     });
     expect(ids(spec)).not.toContain("C21");
   });
+
+  it("개인정보 수집 + 저장 암호화 꺼짐이면 C22 를 잡는다", () => {
+    const spec = createDraftSpec({
+      compliance: { privacy: { collectsPii: true }, security: { encryption: { atRest: false } } },
+    });
+    expect(ids(spec)).toContain("C22");
+  });
+
+  it("IP 허용목록을 켰는데 CIDR 가 비면 C23 을 잡는다", () => {
+    const spec = createDraftSpec({
+      compliance: { security: { ipAllowlist: { enabled: true } } },
+    });
+    expect(ids(spec)).toContain("C23");
+  });
 });
 
 describe("getMissingRequired / isExportReady", () => {

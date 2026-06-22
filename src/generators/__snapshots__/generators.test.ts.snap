@@ -52,6 +52,7 @@ dist/
 
 - 데이터 국내 보관: 예
 - 망분리 준수: 예
+- 암호화: 저장 아니오 / 전송 예
 - 감사 로그: 예
 - 접근성: KWCAG 2.2 AAA
 
@@ -345,7 +346,8 @@ OO부 정보화담당관 챗봇 프로젝트.
       "reranker": "bge-reranker"
     },
     "citations": true,
-    "accessControl": "none"
+    "accessControl": "none",
+    "glossary": []
   },
   "llm": {
     "provider": "opensource",
@@ -454,11 +456,19 @@ OO부 정보화담당관 챗봇 프로젝트.
   "compliance": {
     "privacy": {
       "collectsPii": false,
-      "masking": true
+      "masking": true,
+      "piaRequired": false
     },
     "security": {
       "dataResidencyKR": true,
-      "networkSeparation": true
+      "networkSeparation": true,
+      "encryption": {
+        "atRest": false,
+        "inTransit": true
+      },
+      "ipAllowlist": {
+        "enabled": false
+      }
     },
     "a11y": "kwcag-aa",
     "procurement": {
@@ -467,7 +477,10 @@ OO부 정보화담당관 챗봇 프로젝트.
     }
   },
   "ops": {
-    "audit": true
+    "audit": true,
+    "backup": {
+      "enabled": false
+    }
   }
 }
 ",
@@ -973,6 +986,7 @@ dist/
 
 - 데이터 국내 보관: 예
 - 망분리 준수: 아니오
+- 암호화: 저장 아니오 / 전송 예
 - 감사 로그: 예
 - 접근성: KWCAG 2.2 AA
 
@@ -1262,7 +1276,8 @@ OO광역시 민원봉사과 챗봇 프로젝트.
       "strategy": "hybrid"
     },
     "citations": true,
-    "accessControl": "none"
+    "accessControl": "none",
+    "glossary": []
   },
   "llm": {
     "provider": "claude",
@@ -1387,16 +1402,27 @@ OO광역시 민원봉사과 챗봇 프로젝트.
   "compliance": {
     "privacy": {
       "collectsPii": false,
-      "masking": true
+      "masking": true,
+      "piaRequired": false
     },
     "security": {
       "dataResidencyKR": true,
-      "networkSeparation": false
+      "networkSeparation": false,
+      "encryption": {
+        "atRest": false,
+        "inTransit": true
+      },
+      "ipAllowlist": {
+        "enabled": false
+      }
     },
     "a11y": "kwcag-aa"
   },
   "ops": {
-    "audit": true
+    "audit": true,
+    "backup": {
+      "enabled": false
+    }
   }
 }
 ",
@@ -1904,6 +1930,7 @@ dist/
 
 - Data residency (South Korea): Yes
 - Network separation compliance: No
+- Encryption: at-rest No / in-transit Yes
 - Audit log: Yes
 - Accessibility: KWCAG 2.2 Level AA
 
@@ -2193,7 +2220,8 @@ OO광역시 민원봉사과 chatbot project.
       "strategy": "hybrid"
     },
     "citations": true,
-    "accessControl": "none"
+    "accessControl": "none",
+    "glossary": []
   },
   "llm": {
     "provider": "claude",
@@ -2318,16 +2346,27 @@ OO광역시 민원봉사과 chatbot project.
   "compliance": {
     "privacy": {
       "collectsPii": false,
-      "masking": true
+      "masking": true,
+      "piaRequired": false
     },
     "security": {
       "dataResidencyKR": true,
-      "networkSeparation": false
+      "networkSeparation": false,
+      "encryption": {
+        "atRest": false,
+        "inTransit": true
+      },
+      "ipAllowlist": {
+        "enabled": false
+      }
     },
     "a11y": "kwcag-aa"
   },
   "ops": {
-    "audit": true
+    "audit": true,
+    "backup": {
+      "enabled": false
+    }
   }
 }
 ",

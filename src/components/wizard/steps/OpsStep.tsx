@@ -36,6 +36,30 @@ export function OpsStep() {
         checked={ops.audit}
         onChange={(v) => update("ops", { audit: v })}
       />
+      <NumberField
+        label="로그 보관 기간(일)"
+        value={ops.logRetentionDays}
+        onChange={(v) => update("ops", { logRetentionDays: v })}
+        hint="대화/감사 로그 보관 주기(공공 기록물 관리). 개인정보 보관 기간과 별개."
+      />
+
+      <Field label="백업 / 재해복구(DR)">
+        <div className="space-y-2">
+          <ToggleField
+            label="백업 사용"
+            checked={ops.backup.enabled}
+            onChange={(v) => update("ops", { backup: { ...ops.backup, enabled: v } })}
+          />
+          {ops.backup.enabled && (
+            <TextField
+              label="백업 주기"
+              value={ops.backup.cycle ?? ""}
+              onChange={(v) => update("ops", { backup: { ...ops.backup, cycle: v || undefined } })}
+              placeholder="예: 매일 02:00 / 주 1회"
+            />
+          )}
+        </div>
+      </Field>
 
       <Field label="관측(Observability)">
         <div className="space-y-3">

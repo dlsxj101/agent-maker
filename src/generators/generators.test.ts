@@ -250,6 +250,48 @@ describe("세션 영속/재개 · 폴백 · 운영시간 (M7 후속)", () => {
   });
 });
 
+describe("보안·품질 신규 옵션 (전수 재감사 2차)", () => {
+  it("암호화(at-rest)·IP 제한·PIA 가 PROMPT/ARCHITECTURE/.env 에 반영된다", () => {
+    const spec = createDraftSpec({
+      compliance: {
+        privacy: { collectsPii: true, piaRequired: true },
+        security: { encryption: { atRest: true }, ipAllowlist: { enabled: true, cidrs: ["10.0.0.0/8"] } },
+      },
+    });
+    const m = fileMap(generateArtifacts(spec, { now: FIXED_NOW }));
+    expect(m["PROMPT.md"]).toContain("암호화");
+    expect(m["PROMPT.md"]).toContain("10.0.0.0/8");
+    expect(m["PROMPT.md"]).toContain("PIA");
+    expect(m["ARCHITECTURE.md"]).toContain("접속 IP 제한");
+    expect(m[".env.example"]).toContain("IP_ALLOWLIST=10.0.0.0/8");
+  });
+
+  it("RAG no-answer 임계값(minScore)·용어집이 PROMPT 와 파이프라인에 반영된다", () => {
+    const spec = createDraftSpec({
+      rag: { enabled: true, retrieval: { minScore: 0.7 }, glossary: ["등본=주민등록등본,초본"] },
+      evaluation: { testset: [{ question: "등본?", expectedSource: "x.pdf" }] },
+    });
+    const m = fileMap(generateArtifacts(spec, { now: FIXED_NOW }));
+    expect(m["PROMPT.md"]).toContain("minScore=0.7");
+    expect(m["PROMPT.md"]).toContain("no-answer");
+    expect(m["PROMPT.md"]).toContain("용어집");
+    expect(m["src/rag/pipeline.ts"]).toContain("0.7"); // 임계값 주석
+  });
+
+  it("로그 보관기간·백업이 PROMPT 운영 단계에 반영된다", () => {
+    const spec = createDraftSpec({ ops: { logRetentionDays: 365, backup: { enabled: true, cycle: "매일 02:00" } } });
+    const prompt = fileMap(generateArtifacts(spec, { now: FIXED_NOW }))["PROMPT.md"];
+    expect(prompt).toContain("365일 보관");
+    expect(prompt).toContain("백업");
+  });
+
+  it("기본값이면 신규 보안 옵션이 PROMPT 에 안 나온다(스냅샷 안정)", () => {
+    const prompt = fileMap(generateArtifacts(cloudSpec, { now: FIXED_NOW }))["PROMPT.md"];
+    expect(prompt).not.toContain("IP_ALLOWLIST");
+    expect(prompt).not.toContain("PIA");
+  });
+});
+
 describe("결정성", () => {
   it("동일 spec + 동일 now → 완전히 동일한 산출", () => {
     const a = generateArtifacts(cloudSpec, { now: FIXED_NOW });

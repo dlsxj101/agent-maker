@@ -385,11 +385,11 @@ AgentSpec {
   - **M7-B — 음성 엔진 카탈로그화**: `VOICE_STT/TTS_ENGINES`(현재 enum)를 메타데이터(라벨·설명·온프레미스 적합성·
     정합 경고)를 가진 **카탈로그 데이터**(`src/catalog/voice.ts`)로 분리. InteractionStep UI·충돌(C15/C16)·산출물이 데이터를 참조.
   - **M7-C — 산출물 다국어(한/영)**: `docLang` 필드 신설 → 생성 문서(PROMPT/DESIGN/CLAUDE/ARCHITECTURE/README)와
-    문서 라벨을 ko/en으로 렌더. `format.ts` 라벨 사전·`docs.ts` 템플릿을 언어별로 분기. 마법사 UI 라벨 다국어화는 후속.
+    문서 라벨을 ko/en으로 렌더. `format.ts` 라벨 사전·`docs.ts` 템플릿을 언어별로 분기.
   - **M7-D — 스택별 풀 패리티 스캐폴드**: Python(FastAPI/Django/Flask)·Java(Spring Boot)·Go(Gin/Echo) 각각
     Node와 동등한 깊이의 골격 생성. export-verify를 스택별로 확장(최소 tsc/컴파일·기동·골든셋 스모크).
   - **검증**: 각 스택 산출물의 정적 검증(컴파일/타입체크)·`/health`·골든셋 스모크. 골든 스냅샷 갱신. 단위 테스트 확장.
-  - ⏭️ **마법사 UI 라벨 다국어화**(산출물이 아닌 마법사 자체)는 수요 기반 후속.
+  - ❌ **마법사 UI 자체 다국어화는 범위에서 제외(드롭, 2026-06-22 사용자 결정)** — 이 도구의 공용어는 한국어로 고정.
 
   **M7 진행 로그 (2026-06-21):**
   - ✅ **M7-B 음성 카탈로그**: `src/catalog/voice.ts`(STT/TTS 라벨·설명·배포위치). UI·충돌(C16, `CLOUD_VOICE_ENGINES` 파생)·문서(format/docs)가 데이터 참조. (커밋됨)
@@ -412,7 +412,14 @@ AgentSpec {
     ③ **모델 폴백/failover**(`llm.fallbackModel`) — 1차 모델 실패·과부하 시 전환, PROMPT 반영.
     나머지 후보(쿼리 재작성/메타데이터 필터/CORS/백업 등)는 런타임 구현 디테일로 재확인(PROMPT 가 처리, §9 포화 판단 유지).
     UI(LlmStep·ConversationStep)·spec-schema·단위 테스트(+8, 총 80) 반영.
-  - 🏁 **M7 완료**: B/0/A/D/C + 깊이 갭 해소 + 프레임워크 변형 + 옵션 재감사/보강(세션 영속·운영시간·폴백). 남은 항목(마법사 UI 라벨 다국어)은 백로그.
+  - ✅ **옵션 전수 재감사 2차(2026-06-22)**: 신규 distinct 공백 추가 발굴·보강(전부 채택).
+    ① **데이터 암호화**(`compliance.security.encryption` at-rest/in-transit) — 보안성 검토. ARCHITECTURE 항상 명시.
+    ② **RAG no-answer 임계값**(`rag.retrieval.minScore`) — 유사도 미만이면 "근거 부족" 응답(환각 억제). PROMPT+Node 파이프라인 주석.
+    ③ **접속 IP 제한**(`compliance.security.ipAllowlist`) — 내부망/망분리. PROMPT+.env(IP_ALLOWLIST).
+    ④ **로그 보관기간**(`ops.logRetentionDays`)·**백업/DR**(`ops.backup`)·**PIA**(`compliance.privacy.piaRequired`)·**용어집/동의어**(`rag.glossary`).
+    충돌 C22(PII+at-rest off)·C23(IP허용목록 비어있음). UI(Compliance/Rag/Ops Step)·spec-schema·단위테스트(+6, 총 86).
+    검증: 전체 옵션 활성 Node 프로필 `tsc`+골든 통과, 기존 스냅샷 additive(신규 기본값 + ARCHITECTURE 암호화 1줄).
+  - 🏁 **M7 완료**: B/0/A/D/C + 깊이 갭 해소 + 프레임워크 변형 + 옵션 재감사 1·2차(세션영속·운영시간·폴백·암호화·no-answer·IP제한·로그보관·백업·PIA·용어집). (마법사 UI 다국어는 범위 제외 확정)
 
 > **검증 루프 요약** (제품의 본질이므로 로드맵에 명시):
 > - 자동: 골든 산출물 스냅샷 테스트 · `AgentSpec` round-trip · 충돌 규칙 단위 테스트
@@ -460,7 +467,7 @@ AgentSpec {
 
 **여전히 열려 있는 항목:**
 - ✅ 마법사 배포 타깃 = **정적 export 확정**(M6, `output: "export"`). 폐쇄망 배포 시 `out/` 정적 파일 서빙. **공개 데모는 GitHub Pages 자동 배포**(M6, 위 §8 참조) — 두 배포는 동일 `out/` 산출물 공유.
-- 📌 **백로그**: 산출물 다국어(한/영) — 현재는 한국어 기준. 수요 발생 시 PROMPT/DESIGN 템플릿·UI 라벨 다국어화.
+- ✅ **산출물 다국어(한/영) 완료**(M7-C, `docLang`). 마법사 UI 자체 다국어화는 **범위 제외(드롭)** — 도구 공용어는 한국어 고정.
 - ✅ **상호작용/에이전트 능력 옵션(2~3패스 구현 완료)**: §9 interaction(동작방식·도구정책/루프·스트리밍·렌더링·출력형식·컨텍스트미터·웰컴·컨트롤[초기화/내보내기]·피드백·멀티모달) + §10 agent(서브에이전트·AskUser·내장도구·장기기억·컨텍스트 자동압축·안전[거절/rate limit/남용]). guardrails(groundedOnly·piiFilter·bannedTopics)는 §7 llm.
 - ✅ **(구현 완료)** 서브에이전트 역할 명세, 도구결과 캐싱(ops.caching tool-result), 핸드오프 SLA, A/B 응답 비교, 음성 STT/TTS 엔진, 이용 고지/동의·상태 메시지·접근성 사용자 컨트롤.
 - ✅ **시각 선택 감사(완료)**: 모든 단일선택 select를 `OptionCards`(미리보기 카드)로 전환. backend(런타임/프레임워크/인증/배포/망)·database(RDB/이력/캐시/파일)·frontend(프레임워크/임베드/KWCAG)·rag(청킹/임베딩/벡터DB/검색/리랭커)·llm(모델/호출)·conversation(톤·예시발화/폴백/핸드오프)·interaction(정책/속도/표시/길이/음성)·compliance(KWCAG). 단일선택 평문 드롭다운 0개.

@@ -254,5 +254,26 @@ export function detectConflicts(spec: AgentSpec): Conflict[] {
     });
   }
 
+  // C22: 개인정보 수집 + 저장 암호화(at-rest) 꺼짐
+  if (spec.compliance.privacy.collectsPii && !spec.compliance.security.encryption.atRest) {
+    out.push({
+      id: "C22",
+      section: "compliance",
+      message: "개인정보를 저장하는데 저장 암호화(at-rest)가 꺼져 있습니다. 보안성 검토 대응을 위해 켜는 것을 권장합니다.",
+    });
+  }
+
+  // C23: IP 허용목록을 켰는데 허용 대역(CIDR)이 비어 있음
+  if (
+    spec.compliance.security.ipAllowlist.enabled &&
+    (!spec.compliance.security.ipAllowlist.cidrs || spec.compliance.security.ipAllowlist.cidrs.length === 0)
+  ) {
+    out.push({
+      id: "C23",
+      section: "compliance",
+      message: "접속 IP 제한을 켰지만 허용 대역(CIDR)이 비어 있습니다. 허용할 IP 대역을 입력하세요.",
+    });
+  }
+
   return out;
 }

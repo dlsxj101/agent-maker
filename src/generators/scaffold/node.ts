@@ -678,7 +678,11 @@ ${corpus}
 export async function search(query: string, topK = ${spec.rag.retrieval.topK ?? 3}): Promise<Chunk[]> {
   const real = process.env.EMBEDDING_API_URL && process.env.DATABASE_URL;
   if (real) {
-    // TODO: ${spec.rag.embedding} 임베딩 + ${spec.rag.vectorDb} top-k 검색 구현
+    // TODO: ${spec.rag.embedding} 임베딩 + ${spec.rag.vectorDb} top-k 검색 구현${
+      spec.rag.retrieval.minScore != null
+        ? `\n    // 신뢰도 임계값: 최고 유사도 < ${spec.rag.retrieval.minScore} 이면 빈 결과를 반환해 호출부가 no-answer 처리하게 한다.`
+        : ""
+    }
     console.warn("[rag] 실제 벡터 검색 미구현 — 샘플 코퍼스로 폴백합니다.");
   }
   const terms = query.toLowerCase().split(/\\s+/).filter(Boolean);

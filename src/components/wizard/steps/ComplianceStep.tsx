@@ -43,6 +43,11 @@ export function ComplianceStep() {
             value={c.privacy.retentionDays}
             onChange={(v) => update("compliance", { privacy: { ...c.privacy, retentionDays: v } })}
           />
+          <ToggleField
+            label="개인정보 영향평가(PIA) 필요"
+            checked={c.privacy.piaRequired}
+            onChange={(v) => update("compliance", { privacy: { ...c.privacy, piaRequired: v } })}
+          />
         </div>
       </Field>
 
@@ -63,6 +68,39 @@ export function ComplianceStep() {
             checked={c.security.nisReview ?? false}
             onChange={(v) => update("compliance", { security: { ...c.security, nisReview: v } })}
           />
+          <ToggleField
+            label="저장 데이터 암호화 (at-rest)"
+            checked={c.security.encryption.atRest}
+            onChange={(v) =>
+              update("compliance", { security: { ...c.security, encryption: { ...c.security.encryption, atRest: v } } })
+            }
+          />
+          <ToggleField
+            label="전송 구간 암호화 (TLS/HTTPS)"
+            checked={c.security.encryption.inTransit}
+            onChange={(v) =>
+              update("compliance", { security: { ...c.security, encryption: { ...c.security.encryption, inTransit: v } } })
+            }
+          />
+          <ToggleField
+            label="접속 IP 제한 (허용목록)"
+            checked={c.security.ipAllowlist.enabled}
+            onChange={(v) =>
+              update("compliance", { security: { ...c.security, ipAllowlist: { ...c.security.ipAllowlist, enabled: v } } })
+            }
+          />
+          {c.security.ipAllowlist.enabled && (
+            <StringListField
+              label="허용 IP 대역 (CIDR)"
+              value={c.security.ipAllowlist.cidrs ?? []}
+              onChange={(v) =>
+                update("compliance", {
+                  security: { ...c.security, ipAllowlist: { ...c.security.ipAllowlist, cidrs: v.length ? v : undefined } },
+                })
+              }
+              placeholder="예: 10.0.0.0/8, 192.168.0.0/16"
+            />
+          )}
         </div>
       </Field>
 

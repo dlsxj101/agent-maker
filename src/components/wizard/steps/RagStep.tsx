@@ -10,7 +10,7 @@ import {
   RETRIEVAL_STRATEGY_DESCRIPTIONS,
 } from "@/catalog";
 import { label } from "@/generators/format";
-import { OptionCards, ToggleField, NumberField, ChipMulti } from "../controls";
+import { OptionCards, ToggleField, NumberField, ChipMulti, StringListField } from "../controls";
 
 // ── 임베딩 카드 preview 배지 헬퍼 ──────────────────────────────────────────
 /** 소형 배지 렌더 */
@@ -193,7 +193,22 @@ export function RagStep() {
         columns={3}
       />
 
+      <NumberField
+        label="검색 신뢰도 임계값 (no-answer)"
+        value={rag.retrieval.minScore}
+        onChange={(v) => update("rag", { retrieval: { ...rag.retrieval, minScore: v } })}
+        hint="유사도가 이 값 미만이면 '근거 부족'으로 보고 모른다고 답합니다(환각 억제). 예: 0.7"
+      />
+
       <ToggleField label="답변에 출처/페이지 표기 (공공 신뢰성)" checked={rag.citations} onChange={(v) => update("rag", { citations: v })} />
+
+      <StringListField
+        label="용어집 / 동의어 사전"
+        value={rag.glossary}
+        onChange={(v) => update("rag", { glossary: v })}
+        placeholder="예: 등본=주민등록등본, 초본"
+      />
+      <p className="-mt-2 text-xs text-muted">전문용어·약어를 정규화해 검색/답변 품질을 높입니다. 형식: 용어=동의어1,동의어2</p>
 
       {/* 문서 권한 기반 검색 — OptionCards */}
       <OptionCards

@@ -36,6 +36,10 @@ export function envEntries(spec: AgentSpec): string[] {
       env.push("EMBEDDING_API_URL=http://localhost:8080/embed");
     }
   }
+  if (spec.compliance.security.ipAllowlist.enabled) {
+    env.push("# 접속 허용 IP 대역(CIDR) — 앱/프록시에서 이 목록만 허용 (콤마 구분)");
+    env.push(`IP_ALLOWLIST=${(spec.compliance.security.ipAllowlist.cidrs ?? []).join(",")}`);
+  }
   return env;
 }
 

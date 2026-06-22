@@ -334,10 +334,14 @@ const RagSchema = z
         strategy: z.enum(RETRIEVAL_STRATEGIES).default("hybrid"), // BM25 + 벡터
         topK: z.number().optional(),
         reranker: z.string().optional(), // (catalog) bge-reranker/none
+        // 검색 신뢰도 임계값 — 최고 유사도가 이 값 미만이면 근거 부족으로 보고 "모름"을 답한다(환각 억제).
+        minScore: z.number().optional(),
       })
       .prefault({}),
     citations: z.boolean().default(true), // 출처/페이지 표기 (공공 신뢰성)
     accessControl: z.enum(RAG_ACCESS_CONTROLS).default("none"), // 문서 권한 기반 검색
+    // 용어집/동의어 — 공공 문서 전문용어·약어 정규화로 검색/답변 품질 향상. 각 항목 "용어=동의어1,동의어2" 권장.
+    glossary: z.array(z.string()).default([]),
   })
   .prefault({});
 
@@ -626,6 +630,7 @@ const ComplianceSchema = z
         piiItems: z.array(z.string()).optional(),
         masking: z.boolean().default(true),
         retentionDays: z.number().optional(),
+        piaRequired: z.boolean().default(false), // 개인정보 영향평가(PIA) 필요 여부 (공공 PIPA)
       })
       .prefault({}),
     security: z
@@ -633,6 +638,20 @@ const ComplianceSchema = z
         dataResidencyKR: z.boolean().default(true), // 데이터 국내 보관
         networkSeparation: z.boolean().default(false),
         nisReview: z.boolean().optional(), // 국정원 보안성 검토
+        // 데이터 암호화 (보안성 검토 필수) — 저장(at-rest)·전송(in-transit)
+        encryption: z
+          .object({
+            atRest: z.boolean().default(false),
+            inTransit: z.boolean().default(true), // TLS/HTTPS 기본
+          })
+          .prefault({}),
+        // 접속 IP 제한/허용목록 (내부망·망분리)
+        ipAllowlist: z
+          .object({
+            enabled: z.boolean().default(false),
+            cidrs: z.array(z.string()).optional(), // 허용 대역(CIDR) 목록
+          })
+          .prefault({}),
       })
       .prefault({}),
     a11y: z.enum(COMPLIANCE_A11Y).default("kwcag-aa"), // frontend.a11yLevel과 정합
@@ -658,6 +677,13 @@ const ComplianceSchema = z
 const OpsSchema = z
   .object({
     audit: z.boolean().default(true), // 대화 로그/감사 이력
+    logRetentionDays: z.number().optional(), // 대화/감사 로그 보관 기간(공공 기록물 관리; PII 보관과 별개)
+    backup: z
+      .object({
+        enabled: z.boolean().default(false), // 백업/재해복구(DR)
+        cycle: z.string().optional(), // 백업 주기(예: "매일 02:00")
+      })
+      .prefault({}),
     observability: z
       .object({
         metrics: z.array(z.enum(OBSERVABILITY_METRICS)).default([]),

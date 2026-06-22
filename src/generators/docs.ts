@@ -107,6 +107,20 @@ export function renderPromptMd(spec: AgentSpec): string {
     if (["bge-m3", "kure", "ko-sroberta", "multilingual-e5"].includes(spec.rag.embedding)) {
       ragExtra.push(s.prompt.step_rag_server(spec.rag.embedding));
     }
+    if (spec.rag.retrieval.minScore != null) {
+      ragExtra.push(
+        lang === "en"
+          ? `Apply a retrieval confidence threshold (minScore=${spec.rag.retrieval.minScore}): if the top similarity is below it, do not answer from the model — respond that there is insufficient grounding (no-answer).`
+          : `검색 신뢰도 임계값(minScore=${spec.rag.retrieval.minScore})을 적용한다 — 최고 유사도가 이 값 미만이면 모델로 답하지 말고 "근거가 부족합니다"로 안내(no-answer)한다.`,
+      );
+    }
+    if (spec.rag.glossary.length) {
+      ragExtra.push(
+        lang === "en"
+          ? `Use the glossary/synonyms (${spec.rag.glossary.length} entries in agent-spec.json) to normalize query terms and answer wording (e.g. expand abbreviations) before retrieval.`
+          : `용어집/동의어(agent-spec.json 의 ${spec.rag.glossary.length}개)를 사용해 검색 전 질의 용어·답변 표현을 정규화한다(약어 확장 등).`,
+      );
+    }
     const citeNote = spec.rag.citations
       ? s.prompt.step_rag_cite_yes
       : s.prompt.step_rag_cite_no;
@@ -305,14 +319,36 @@ export function renderPromptMd(spec: AgentSpec): string {
     `${n++}. ${s.prompt.step_golden}${spec.evaluation.abTesting ? s.prompt.step_abtest : ""}`,
   );
 
-  // 컴플라이언스 점검
+  // 컴플라이언스 점검 — 보안(암호화·IP 제한·PIA) 추가 지시
+  const sec = spec.compliance.security;
+  const secBits: string[] = [];
+  if (sec.encryption.atRest || !sec.encryption.inTransit)
+    secBits.push(
+      lang === "en"
+        ? `encryption at-rest ${yesno(sec.encryption.atRest, lang)} / in-transit ${yesno(sec.encryption.inTransit, lang)}`
+        : `암호화 저장 ${yesno(sec.encryption.atRest, lang)}·전송 ${yesno(sec.encryption.inTransit, lang)}`,
+    );
+  if (sec.ipAllowlist.enabled)
+    secBits.push(
+      lang === "en"
+        ? `restrict access to an IP allowlist (${(sec.ipAllowlist.cidrs ?? []).join(", ") || "set CIDRs"}) at app/proxy (env IP_ALLOWLIST)`
+        : `접속을 허용 IP 대역(${(sec.ipAllowlist.cidrs ?? []).join(", ") || "CIDR 입력"})으로 제한(앱/프록시, env IP_ALLOWLIST)`,
+    );
+  if (spec.compliance.privacy.piaRequired)
+    secBits.push(lang === "en" ? "complete a Privacy Impact Assessment (PIA)" : "개인정보 영향평가(PIA) 수행");
+  const secNote = secBits.length
+    ? lang === "en"
+      ? ` Security: ${secBits.join("; ")}.`
+      : ` 보안: ${secBits.join("; ")}.`
+    : "";
+
   if (lang === "en") {
     steps.push(
-      `${n++}. ${s.prompt.step_compliance_prefix}: ${s.prompt.step_compliance_a11y} (${label("a11yLevel", spec.frontend.a11yLevel, lang)}), ${s.prompt.step_compliance_pii} (${yesno(spec.compliance.privacy.collectsPii && spec.compliance.privacy.masking, lang)}), ${s.prompt.step_compliance_audit} (${yesno(spec.backend.logging.audit || spec.ops.audit, lang)}) — ${s.prompt.step_compliance_footer}`,
+      `${n++}. ${s.prompt.step_compliance_prefix}: ${s.prompt.step_compliance_a11y} (${label("a11yLevel", spec.frontend.a11yLevel, lang)}), ${s.prompt.step_compliance_pii} (${yesno(spec.compliance.privacy.collectsPii && spec.compliance.privacy.masking, lang)}), ${s.prompt.step_compliance_audit} (${yesno(spec.backend.logging.audit || spec.ops.audit, lang)}) — ${s.prompt.step_compliance_footer}${secNote}`,
     );
   } else {
     steps.push(
-      `${n++}. **컴플라이언스 점검**: 접근성(${label("a11yLevel", spec.frontend.a11yLevel, lang)}), 개인정보 마스킹(${yesno(spec.compliance.privacy.collectsPii && spec.compliance.privacy.masking, lang)}), 감사 로그(${yesno(spec.backend.logging.audit || spec.ops.audit, lang)})를 최종 확인한다. 동봉된 감사 로그 미들웨어·마스킹 유틸 stub을 실제 정책에 맞게 채운다.`,
+      `${n++}. **컴플라이언스 점검**: 접근성(${label("a11yLevel", spec.frontend.a11yLevel, lang)}), 개인정보 마스킹(${yesno(spec.compliance.privacy.collectsPii && spec.compliance.privacy.masking, lang)}), 감사 로그(${yesno(spec.backend.logging.audit || spec.ops.audit, lang)})를 최종 확인한다. 동봉된 감사 로그 미들웨어·마스킹 유틸 stub을 실제 정책에 맞게 채운다.${secNote}`,
     );
   }
 
@@ -323,6 +359,16 @@ export function renderPromptMd(spec: AgentSpec): string {
     opsParts.push(s.prompt.step_ops_analytics(obs.analytics));
   if (perf?.caching.length)
     opsParts.push(s.prompt.step_ops_cache(perf.caching.join("/"), perf.promptCacheTtlSec));
+  if (spec.ops.logRetentionDays)
+    opsParts.push(
+      lang === "en" ? `retain logs for ${spec.ops.logRetentionDays} days` : `로그 ${spec.ops.logRetentionDays}일 보관`,
+    );
+  if (spec.ops.backup.enabled)
+    opsParts.push(
+      lang === "en"
+        ? `backups${spec.ops.backup.cycle ? ` (${spec.ops.backup.cycle})` : ""}`
+        : `백업${spec.ops.backup.cycle ? ` (${spec.ops.backup.cycle})` : ""}`,
+    );
   if (opsParts.length) {
     steps.push(`${n++}. ${s.prompt.step_ops_prefix}: ${opsParts.join(", ")}.`);
   }
@@ -518,7 +564,12 @@ ${embedServerNote}
 
 - ${as.residency}: ${yesno(spec.compliance.security.dataResidencyKR, lang)}
 - ${as.network_sep}: ${yesno(spec.compliance.security.networkSeparation, lang)}
-- ${as.audit}: ${yesno(spec.backend.logging.audit, lang)}
+- ${lang === "en" ? "Encryption" : "암호화"}: ${lang === "en" ? "at-rest" : "저장"} ${yesno(spec.compliance.security.encryption.atRest, lang)} / ${lang === "en" ? "in-transit" : "전송"} ${yesno(spec.compliance.security.encryption.inTransit, lang)}
+${
+    spec.compliance.security.ipAllowlist.enabled
+      ? `- ${lang === "en" ? "IP allowlist" : "접속 IP 제한"}: ${(spec.compliance.security.ipAllowlist.cidrs ?? []).join(", ") || (lang === "en" ? "(set CIDRs)" : "(CIDR 입력)")}\n`
+      : ""
+  }- ${as.audit}: ${yesno(spec.backend.logging.audit, lang)}
 - ${as.a11y}: ${label("a11yLevel", spec.frontend.a11yLevel, lang)}
 
 ## ${as.sec4}
