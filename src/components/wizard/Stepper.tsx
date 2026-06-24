@@ -31,10 +31,10 @@ export function Stepper() {
                 type="button"
                 onClick={() => setStep(i)}
                 aria-current={active ? "step" : undefined}
-                className={`flex w-full items-center gap-2.5 rounded-token border-l-2 py-1.5 pl-2.5 pr-2 text-left text-[13px] transition ${
+                className={`flex w-full items-center gap-2.5 rounded-token border-l-2 py-1.5 pl-2.5 pr-2 text-left text-[13px] transition duration-150 ${
                   active
                     ? "border-[var(--accent)] bg-[var(--accent-weak)] font-medium text-foreground"
-                    : "border-transparent text-muted hover:bg-surface-2"
+                    : "border-transparent text-muted hover:bg-surface-2 hover:text-foreground motion-safe:hover:pl-3"
                 }`}
                 style={{ borderRadius: "0 var(--radius) var(--radius) 0" }}
               >

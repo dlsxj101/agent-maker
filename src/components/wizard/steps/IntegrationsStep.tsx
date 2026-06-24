@@ -18,7 +18,7 @@ export function IntegrationsStep() {
 
   return (
     <div className="space-y-6">
-      <Field label="외부/내부 API 연동">
+      <Field label="외부/내부 API 연동" info="챗봇이 호출할 외부 또는 내부망 API를 등록하고 인증 방식을 지정한다.">
         <div className="space-y-2">
           {apis.map((api, i) => (
             <div key={i} className="flex gap-2">
@@ -63,7 +63,7 @@ export function IntegrationsStep() {
         </div>
       </Field>
 
-      <Field label="도구 사용(tool use / function calling)" hint="챗봇이 호출할 액션">
+      <Field label="도구 사용(tool use / function calling)" hint="챗봇이 호출할 액션" info="챗봇이 외부 기능·API를 직접 실행하는 동작을 정의한다. 각 도구는 이름과 설명이 필요하다.">
         <div className="space-y-2">
           {tools.map((tool, i) => (
             <div key={i} className="flex gap-2">
@@ -104,6 +104,7 @@ export function IntegrationsStep() {
         value={integ.webhooks}
         onChange={(v) => update("integrations", { webhooks: v as typeof integ.webhooks })}
         options={WEBHOOK_CHANNELS.map((w) => [w, w === "none" ? "없음" : w === "email" ? "이메일" : "문자(SMS)"])}
+        info="특정 이벤트 발생 시 이메일·문자로 외부에 자동 알림을 보낸다."
       />
     </div>
   );

@@ -109,7 +109,7 @@ export function RagStep() {
   if (!rag.enabled) {
     return (
       <div className="space-y-4">
-        <ToggleField label="RAG(지식 기반 검색) 사용" checked={false} onChange={(v) => update("rag", { enabled: v })} />
+        <ToggleField label="RAG(지식 기반 검색) 사용" info="업로드 문서를 검색해 근거 있는 답변을 하는 방식. 환각(hallucination)을 크게 줄여준다." checked={false} onChange={(v) => update("rag", { enabled: v })} />
         <p className="text-sm text-muted">RAG를 사용하면 업로드 문서 기반으로 근거 있는 답변을 합니다.</p>
       </div>
     );
@@ -117,11 +117,12 @@ export function RagStep() {
 
   return (
     <div className="space-y-5">
-      <ToggleField label="RAG(지식 기반 검색) 사용" checked={rag.enabled} onChange={(v) => update("rag", { enabled: v })} />
+      <ToggleField label="RAG(지식 기반 검색) 사용" info="업로드 문서를 검색해 근거 있는 답변을 하는 방식. 환각(hallucination)을 크게 줄여준다." checked={rag.enabled} onChange={(v) => update("rag", { enabled: v })} />
 
       {/* 지식 소스 — 다중 선택이므로 ChipMulti 유지 */}
       <ChipMulti
         label="지식 소스"
+        info="챗봇이 참조할 문서 형식. 공공기관은 HWP(한글 문서)가 많으므로 HWP 파서를 활성화해야 한다."
         value={rag.sources}
         onChange={(v) => update("rag", { sources: v as typeof rag.sources })}
         options={RAG_SOURCES.map((s) => [s, label("sources", s)])}
@@ -129,14 +130,15 @@ export function RagStep() {
       />
 
       <fieldset className="flex gap-4">
-        <ToggleField label="OCR" checked={rag.ingest.ocr} onChange={(v) => update("rag", { ingest: { ...rag.ingest, ocr: v } })} />
-        <ToggleField label="표 추출" checked={rag.ingest.tables} onChange={(v) => update("rag", { ingest: { ...rag.ingest, tables: v } })} />
-        <ToggleField label="이미지" checked={rag.ingest.images} onChange={(v) => update("rag", { ingest: { ...rag.ingest, images: v } })} />
+        <ToggleField label="OCR" info="스캔 이미지·PDF에서 글자를 자동 추출. 종이 문서를 디지털로 받은 공문서에 필수." checked={rag.ingest.ocr} onChange={(v) => update("rag", { ingest: { ...rag.ingest, ocr: v } })} />
+        <ToggleField label="표 추출" info="문서 안의 표(테이블) 구조를 파싱해 검색·답변에 활용한다." checked={rag.ingest.tables} onChange={(v) => update("rag", { ingest: { ...rag.ingest, tables: v } })} />
+        <ToggleField label="이미지" info="문서 내 이미지를 인덱싱 대상에 포함한다. 차트·도표가 많은 문서에 유용." checked={rag.ingest.images} onChange={(v) => update("rag", { ingest: { ...rag.ingest, images: v } })} />
       </fieldset>
 
       {/* 청킹 전략 — OptionCards (단일 선택) */}
       <OptionCards
         label="청킹 전략"
+        info="긴 문서를 검색용으로 어떻게 잘게 나눌지. 조각 크기·겹침이 검색 품질을 좌우한다."
         value={rag.chunking.strategy}
         onChange={(v) =>
           update("rag", { chunking: { ...rag.chunking, strategy: v as (typeof CHUNKING_STRATEGIES)[number] } })
@@ -146,13 +148,14 @@ export function RagStep() {
       />
 
       <div className="grid grid-cols-2 gap-3">
-        <NumberField label="청크 크기" value={rag.chunking.size} onChange={(v) => update("rag", { chunking: { ...rag.chunking, size: v } })} />
-        <NumberField label="오버랩" value={rag.chunking.overlap} onChange={(v) => update("rag", { chunking: { ...rag.chunking, overlap: v } })} />
+        <NumberField label="청크 크기" info="하나의 검색 조각에 포함할 토큰(또는 문자) 수. 너무 크면 잡음, 너무 작으면 맥락 부족." value={rag.chunking.size} onChange={(v) => update("rag", { chunking: { ...rag.chunking, size: v } })} />
+        <NumberField label="오버랩" info="인접 조각이 서로 겹치는 토큰 수. 조각 경계에서 정보가 잘리는 것을 방지한다." value={rag.chunking.overlap} onChange={(v) => update("rag", { chunking: { ...rag.chunking, overlap: v } })} />
       </div>
 
       {/* 임베딩 모델 — OptionCards (단일 선택, 배지 미리보기) */}
       <OptionCards
         label="임베딩 모델"
+        info="문장을 의미 벡터로 바꾸는 모델. 폐쇄망이면 온프레미스(BGE-M3 등)를 골라야 한다."
         value={rag.embedding}
         onChange={(v) => update("rag", { embedding: v })}
         options={embeddingOptions}
@@ -163,6 +166,7 @@ export function RagStep() {
       {/* Vector DB — OptionCards (단일 선택, 온프레미스 배지) */}
       <OptionCards
         label="Vector DB"
+        info="임베딩 벡터를 저장하고 유사도로 검색하는 DB. 폐쇄망이면 온프레미스 친화 제품을 선택해야 한다."
         value={rag.vectorDb}
         onChange={(v) => update("rag", { vectorDb: v as (typeof VECTOR_DBS)[number] })}
         options={vectorDbOptions}
@@ -172,6 +176,7 @@ export function RagStep() {
       {/* 검색 전략 — OptionCards (단일 선택) */}
       <OptionCards
         label="검색 전략"
+        info="문서를 찾는 방식. 하이브리드는 키워드(BM25)+벡터를 혼합해 정확도를 높인다."
         value={rag.retrieval.strategy}
         onChange={(v) =>
           update("rag", { retrieval: { ...rag.retrieval, strategy: v as (typeof RETRIEVAL_STRATEGIES)[number] } })
@@ -180,11 +185,12 @@ export function RagStep() {
         columns={2}
       />
 
-      <NumberField label="top-K" value={rag.retrieval.topK} onChange={(v) => update("rag", { retrieval: { ...rag.retrieval, topK: v } })} />
+      <NumberField label="top-K" info="LLM에 전달할 검색 결과 조각 수. 많을수록 맥락이 풍부해지지만 토큰 비용이 늘어난다." value={rag.retrieval.topK} onChange={(v) => update("rag", { retrieval: { ...rag.retrieval, topK: v } })} />
 
       {/* 리랭커 — OptionCards (단일 선택) */}
       <OptionCards
         label="리랭커"
+        info="1차 검색 결과를 다시 정렬해 정확도를 높이는 모델. 처리 시간이 소폭 늘지만 품질이 크게 개선된다."
         value={rag.retrieval.reranker ?? "none"}
         onChange={(v) =>
           update("rag", { retrieval: { ...rag.retrieval, reranker: v === "none" ? undefined : v } })
@@ -200,10 +206,11 @@ export function RagStep() {
         hint="유사도가 이 값 미만이면 '근거 부족'으로 보고 모른다고 답합니다(환각 억제). 예: 0.7"
       />
 
-      <ToggleField label="답변에 출처/페이지 표기 (공공 신뢰성)" checked={rag.citations} onChange={(v) => update("rag", { citations: v })} />
+      <ToggleField label="답변에 출처/페이지 표기 (공공 신뢰성)" info="답변에 근거 문서·페이지를 표시. 공공기관 신뢰성과 감사 대응에 필수다." checked={rag.citations} onChange={(v) => update("rag", { citations: v })} />
 
       <StringListField
         label="용어집 / 동의어 사전"
+        info="전문용어·약어를 정규화해 검색 누락을 줄인다. 예: 등본=주민등록등본."
         value={rag.glossary}
         onChange={(v) => update("rag", { glossary: v })}
         placeholder="예: 등본=주민등록등본, 초본"
@@ -213,6 +220,7 @@ export function RagStep() {
       {/* 문서 권한 기반 검색 — OptionCards */}
       <OptionCards
         label="문서 접근 제어"
+        info="이용자 권한에 따라 검색 가능한 문서를 제한. 민감 문서가 있는 내부 업무봇에 중요하다."
         columns={3}
         value={rag.accessControl}
         onChange={(v) => update("rag", { accessControl: v as (typeof RAG_ACCESS_CONTROLS)[number] })}

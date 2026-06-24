@@ -55,6 +55,7 @@ export function FrontendStep() {
       {/* 프레임워크 — 시각 카드 선택 */}
       <OptionCards
         label="프레임워크"
+        info="챗봇 프론트엔드를 구현할 기술. 기존 사이트에 붙이려면 임베드 스니펫을, 신규 개발이면 React/Next.js를 권장."
         value={fe.framework}
         onChange={(v) => update("frontend", { framework: v as (typeof FRONTEND_FRAMEWORKS)[number] })}
         options={FRONTEND_FRAMEWORKS.map((f) => ({
@@ -68,6 +69,7 @@ export function FrontendStep() {
       {/* 임베드 방식 — 시각 카드 선택 */}
       <OptionCards
         label="임베드 방식"
+        info="챗봇을 웹사이트에 넣는 방법 — 독립 페이지·스크립트 한 줄·iframe 등."
         value={fe.embed}
         onChange={(v) => update("frontend", { embed: v as (typeof EMBED_MODES)[number] })}
         options={EMBED_MODES.map((e) => ({
@@ -81,6 +83,7 @@ export function FrontendStep() {
       {/* 웹 접근성(KWCAG) 등급 — 시각 카드 선택 */}
       <OptionCards
         label="웹 접근성(KWCAG)"
+        info="한국형 웹 접근성 지침(KWCAG) 준수 등급. 공공기관은 보통 AA 이상 요구."
         value={fe.a11yLevel}
         onChange={(v) => update("frontend", { a11yLevel: v as (typeof A11Y_LEVELS)[number] })}
         options={A11Y_LEVELS.map((a) => ({
@@ -94,12 +97,14 @@ export function FrontendStep() {
 
       <TextField
         label="UI 라이브러리 (선택)"
+        info="컴포넌트 스타일링에 쓸 서드파티 라이브러리. 없으면 none 또는 비워 두세요."
         value={fe.uiLib ?? ""}
         onChange={(v) => update("frontend", { uiLib: v || undefined })}
         placeholder="예: shadcn, mui, none"
       />
       <ToggleField
         label="반응형/모바일 지원"
+        info="화면 크기에 따라 레이아웃이 자동으로 조정되는 반응형(모바일·태블릿 대응) 구현 여부."
         checked={fe.responsive}
         onChange={(v) => update("frontend", { responsive: v })}
       />
@@ -107,6 +112,7 @@ export function FrontendStep() {
       {/* 배포 채널 */}
       <ChipMulti
         label="배포 채널"
+        info="챗봇을 어떤 플랫폼으로 제공할지. 복수 선택 가능하며 폐쇄망이면 웹·앱만 선택 가능합니다."
         value={fe.channels}
         onChange={(v) => update("frontend", { channels: v as typeof fe.channels })}
         options={DEPLOY_CHANNELS.map((c) => [c, CHANNEL_LABELS[c]])}
@@ -115,6 +121,7 @@ export function FrontendStep() {
       {/* 이용자 본인확인 */}
       <OptionCards
         label="이용자 본인확인/로그인"
+        info="챗봇 이용자의 신원 확인 방식. 공동인증서(GPKI)는 민감 민원 처리에 사용됩니다."
         columns={2}
         value={fe.userAuth}
         onChange={(v) => update("frontend", { userAuth: v as (typeof USER_AUTH_MODES)[number] })}
@@ -125,11 +132,13 @@ export function FrontendStep() {
       <div className="grid grid-cols-2 gap-3">
         <ToggleField
           label="UI 문구 다국어 현지화"
+          info="버튼·안내문구 등 UI 텍스트를 여러 언어로 전환할 수 있도록 i18n 처리를 적용합니다."
           checked={fe.localizeUi}
           onChange={(v) => update("frontend", { localizeUi: v })}
         />
         <ToggleField
           label="RTL(우→좌) 언어 지원"
+          info="아랍어·히브리어 등 오른쪽에서 왼쪽으로 읽는 언어를 위한 레이아웃 반전 지원."
           checked={fe.rtl}
           onChange={(v) => update("frontend", { rtl: v })}
         />

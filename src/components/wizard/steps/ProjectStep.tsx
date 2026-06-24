@@ -9,7 +9,7 @@
 import { useWizardStore } from "@/lib/store";
 import { DEPLOY_ENVS, DOC_LANGS, PURPOSES } from "@/lib/agent-spec";
 import { label } from "@/generators/format";
-import { OptionCards } from "../controls";
+import { OptionCards, InfoTip } from "../controls";
 
 export function ProjectStep() {
   const project = useWizardStore((s) => s.spec.project);
@@ -48,7 +48,7 @@ export function ProjectStep() {
           placeholder="예: OO시 민원봇"
         />
       </Field>
-      <Field label="배포 환경">
+      <Field label="배포 환경" info="챗봇이 운영될 네트워크 환경. 폐쇄망이면 외부 클라우드 API를 사용할 수 없습니다.">
         <select
           className="input"
           value={project.deployEnv}
@@ -63,7 +63,7 @@ export function ProjectStep() {
           ))}
         </select>
       </Field>
-      <Field label="용도 (복수 선택)">
+      <Field label="용도 (복수 선택)" info="챗봇이 담당할 주요 업무 유형. 복수 선택 가능하며 산출물 PROMPT에 반영됩니다.">
         <div className="flex flex-wrap gap-2">
           {PURPOSES.map((p) => {
             const active = project.purpose.includes(p);
@@ -88,6 +88,7 @@ export function ProjectStep() {
       <OptionCards
         label="산출물 문서 언어"
         hint="산출물(PROMPT/DESIGN/CLAUDE/ARCHITECTURE/README)을 한국어 또는 영어로 생성합니다. 챗봇 응답 언어와는 별개입니다."
+        info="Claude Code가 읽을 설계 문서의 작성 언어. 챗봇 UI 언어와는 독립적입니다."
         value={project.docLang ?? "ko"}
         onChange={(v: (typeof DOC_LANGS)[number]) => update("project", { docLang: v })}
         options={[
@@ -111,17 +112,22 @@ export function ProjectStep() {
 function Field({
   label: lbl,
   required,
+  info,
   children,
 }: {
   label: string;
   required?: boolean;
+  info?: string;
   children: React.ReactNode;
 }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-sm font-medium">
-        {lbl}
-        {required && <span className="ml-1 text-red-500">*</span>}
+      <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium">
+        <span>
+          {lbl}
+          {required && <span className="ml-1 text-red-500">*</span>}
+        </span>
+        {info && <InfoTip text={info} />}
       </span>
       {children}
     </label>

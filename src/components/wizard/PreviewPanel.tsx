@@ -38,7 +38,7 @@ export function PreviewPanel() {
             <span
               key={k}
               title={`${k}: ${spec.design.colors[k]}`}
-              className="h-7 w-7 rounded-md border border-border"
+              className="h-7 w-7 rounded-md border border-border transition-transform duration-150 motion-safe:hover:scale-110"
               style={{ background: spec.design.colors[k] }}
             />
           ))}

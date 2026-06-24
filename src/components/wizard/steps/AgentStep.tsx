@@ -12,7 +12,7 @@ import {
   CONTEXT_STRATEGIES,
   REFUSAL_STYLES,
 } from "@/lib/agent-spec";
-import { ToggleField, NumberField, OptionCards, StringListField } from "../controls";
+import { ToggleField, NumberField, OptionCards, StringListField, InfoTip } from "../controls";
 
 const CONTEXT_PREV: Record<string, string> = {
   none: "전체 유지",
@@ -51,22 +51,26 @@ export function AgentStep() {
           label="명확화 질문 (AskUser)"
           checked={ag.askUser}
           onChange={(v) => update("agent", { askUser: v })}
+          info="정보가 부족하면 챗봇이 사용자에게 되물어 정확한 답변을 이끌어 낸다."
         />
         <ToggleField
           label="장기 기억 (세션 간 벡터 기억)"
           checked={ag.memory.longTerm}
           onChange={(v) => update("agent", { memory: { ...ag.memory, longTerm: v } })}
+          info="대화가 끊겨도 이전 맥락을 기억해 다음 세션에 이어서 활용한다."
         />
         <ToggleField
           label="서브에이전트"
           checked={ag.subAgents.enabled}
           onChange={(v) => update("agent", { subAgents: { ...ag.subAgents, enabled: v } })}
+          info="복잡한 작업을 여러 보조 에이전트에 분담해 병렬 처리한다."
         />
         {ag.subAgents.enabled && (
           <NumberField
             label="최대 동시 실행"
             value={ag.subAgents.maxParallel}
             onChange={(v) => update("agent", { subAgents: { ...ag.subAgents, maxParallel: v } })}
+            info="동시에 돌아갈 수 있는 보조 에이전트 수. 과도하면 비용이 급증할 수 있다."
           />
         )}
       </fieldset>
@@ -86,12 +90,13 @@ export function AgentStep() {
           }
           placeholder="예: 검색 담당 / 요약 담당 / 검증 담당"
           hint="각 하위 에이전트가 맡을 전문 역할"
+          info="각 보조 에이전트가 담당할 역할을 명시해 산출물 프롬프트에 반영한다."
         />
       )}
 
       {/* 내장 도구 (카드) */}
       <div>
-        <span className="mb-1.5 block text-sm font-medium">내장 도구</span>
+        <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium">내장 도구 <InfoTip text="챗봇이 기본으로 사용할 수 있는 기능 도구. 커스텀 API 도구는 연동 단계에서 따로 추가한다." /></span>
         <p className="mb-2 text-xs text-muted">
           커스텀 API 도구는 연동 단계에서 정의합니다. 여기서는 일반 능력 도구를 켭니다.
         </p>
@@ -134,6 +139,7 @@ export function AgentStep() {
             label: AGENT_LABELS.contextStrategy[id],
             preview: <span className="text-[10px] text-muted">{CONTEXT_PREV[id]}</span>,
           }))}
+          info="대화가 길어졌을 때 오래된 내용을 처리하는 방식. 비용과 기억력에 영향을 준다."
         />
         <fieldset className="grid grid-cols-2 gap-3">
           <div className="flex items-end pb-2">
@@ -141,12 +147,14 @@ export function AgentStep() {
               label="자동 압축 활성"
               checked={ag.context.autoCompact}
               onChange={(v) => update("agent", { context: { ...ag.context, autoCompact: v } })}
+              info="지정 토큰 초과 시 위에서 선택한 전략으로 자동으로 컨텍스트를 줄인다."
             />
           </div>
           <NumberField
             label="압축 트리거(토큰)"
             value={ag.context.budgetTokens}
             onChange={(v) => update("agent", { context: { ...ag.context, budgetTokens: v } })}
+            info="이 토큰 수를 넘으면 자동 압축이 시작된다. 클수록 더 많은 대화를 유지한다."
           />
         </fieldset>
       </div>
@@ -162,18 +170,21 @@ export function AgentStep() {
             label: AGENT_LABELS.refusalStyle[id],
             preview: <span className="text-[10px] italic text-muted">{REFUSAL_PREV[id]}</span>,
           }))}
+          info="답변할 수 없는 질문을 받았을 때 챗봇이 거절하는 말투와 방식."
         />
         <fieldset className="grid grid-cols-2 gap-3">
           <NumberField
             label="분당 요청 상한"
             value={ag.safety.rateLimitPerMin}
             onChange={(v) => update("agent", { safety: { ...ag.safety, rateLimitPerMin: v } })}
+            info="1분당 허용하는 최대 요청 수. 도배나 악의적 과부하를 차단한다."
           />
           <div className="flex items-end pb-2">
             <ToggleField
               label="남용 필터"
               checked={ag.safety.abuseFilter}
               onChange={(v) => update("agent", { safety: { ...ag.safety, abuseFilter: v } })}
+              info="도배·욕설·스팸 등 악의적 사용을 감지해 자동으로 차단한다."
             />
           </div>
         </fieldset>

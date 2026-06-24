@@ -32,9 +32,10 @@ export function WizardShell() {
   const isFirst = stepIndex === 0;
   const isLast = stepIndex === WIZARD_STEPS.length - 1;
 
-  const btn = "rounded-token border border-border px-4 py-2 text-sm font-medium transition";
+  const btn =
+    "rounded-token border border-border px-4 py-2 text-sm font-medium transition duration-150 hover:border-primary hover:text-foreground motion-safe:active:scale-[.98]";
   const btnPrimary =
-    "rounded-token bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition hover:bg-[var(--accent-strong)]";
+    "rounded-token bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition duration-150 hover:bg-[var(--accent-strong)] hover:shadow-md motion-safe:hover:-translate-y-0.5 motion-safe:active:translate-y-0";
 
   return (
     <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 px-4 py-8 lg:grid-cols-[208px_1fr_300px]">
@@ -45,17 +46,20 @@ export function WizardShell() {
 
       {/* 중: 현재 스텝 */}
       <section aria-labelledby="step-title" className="min-w-0">
-        <header className="mb-6 border-b border-hairline pb-4">
-          <p className="eyebrow">
-            step {String(stepIndex).padStart(2, "0")} / {String(WIZARD_STEPS.length - 1).padStart(2, "0")}
-          </p>
-          <h1 id="step-title" className="mt-2 text-xl font-semibold tracking-tight">
-            {step.title}
-          </h1>
-          <p className="mt-1 text-[13px] text-muted">{step.summary}</p>
-        </header>
+        {/* key 로 스텝 전환마다 헤더+폼에 진입 애니메이션 재생 (step-enter) */}
+        <div key={stepIndex} className="step-enter">
+          <header className="mb-6 border-b border-hairline pb-4">
+            <p className="eyebrow">
+              step {String(stepIndex).padStart(2, "0")} / {String(WIZARD_STEPS.length - 1).padStart(2, "0")}
+            </p>
+            <h1 id="step-title" className="mt-2 text-xl font-semibold tracking-tight">
+              {step.title}
+            </h1>
+            <p className="mt-1 text-[13px] text-muted">{step.summary}</p>
+          </header>
 
-        <StepContent stepIndex={stepIndex} />
+          <StepContent stepIndex={stepIndex} />
+        </div>
 
         <div className="mt-8 flex items-center justify-between border-t border-hairline pt-4">
           <button type="button" onClick={prev} disabled={isFirst} className={`${btn} disabled:opacity-40`} style={{ borderRadius: "var(--radius)" }}>

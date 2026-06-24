@@ -83,6 +83,7 @@ export function BackendStep() {
       {/* 런타임 — 이모지 라벨 + 한국어 설명 카드 */}
       <OptionCards
         label="런타임"
+        info="백엔드 서버를 실행할 언어 환경. 공공기관 표준 언어는 Java, AI 연동엔 Python이 유리하다."
         value={be.runtime}
         onChange={(v) => {
           const rt = v as (typeof BACKEND_RUNTIMES)[number];
@@ -97,6 +98,7 @@ export function BackendStep() {
       {frameworks.length > 0 && (
         <OptionCards
           label="프레임워크"
+          info="선택한 런타임 위에서 API·라우팅·미들웨어를 제공하는 웹 프레임워크."
           value={be.framework ?? frameworks[0].id}
           onChange={(v) => update("backend", { framework: v })}
           options={frameworks}
@@ -107,6 +109,7 @@ export function BackendStep() {
       {/* 인증/인가 */}
       <OptionCards
         label="인증/인가"
+        info="사용자가 누구인지 확인하는 방식. 공공기관은 SSO(GPKI 행정전자서명) 연동이 필요한 경우가 많다."
         value={be.auth}
         onChange={(v) => update("backend", { auth: v as (typeof AUTH_MODES)[number] })}
         options={AUTH_OPTIONS}
@@ -116,6 +119,7 @@ export function BackendStep() {
       {/* 배포 형태 */}
       <OptionCards
         label="배포 형태"
+        info="서버를 어떤 방식으로 실행·관리할지. 폐쇄망이나 소규모면 단일 서버, 대규모면 Docker/K8s를 택한다."
         value={be.deploy}
         onChange={(v) => update("backend", { deploy: v as (typeof DEPLOY_FORMS)[number] })}
         options={DEPLOY_OPTIONS}
@@ -125,6 +129,7 @@ export function BackendStep() {
       {/* 네트워크(외부 호출) — 이모지 라벨 + 설명 카드 */}
       <OptionCards
         label="네트워크(외부 호출)"
+        info="서버가 외부 인터넷에 접근할 수 있는지. 폐쇄망(offline)이면 클라우드 LLM·API를 쓸 수 없다."
         value={be.network}
         onChange={(v) => update("backend", { network: v as (typeof NETWORK_MODES)[number] })}
         options={NETWORK_OPTIONS}
@@ -134,6 +139,7 @@ export function BackendStep() {
       {/* 감사 로그 — ToggleField 유지 */}
       <ToggleField
         label="감사 로그(공공기관 대응)"
+        info="누가 언제 어떤 요청을 했는지 기록. 공공기관 감사·개인정보 처리방침 준수에 필수다."
         checked={be.logging.audit}
         onChange={(v) => update("backend", { logging: { ...be.logging, audit: v } })}
       />
@@ -141,6 +147,7 @@ export function BackendStep() {
       {/* 모니터링 텍스트 입력 — TextField 유지 */}
       <TextField
         label="모니터링 (선택)"
+        info="서버 상태·성능 지표를 수집할 도구. 입력하지 않으면 기본 로그만 사용한다."
         value={be.logging.monitoring ?? ""}
         onChange={(v) =>
           update("backend", { logging: { ...be.logging, monitoring: v || undefined } })

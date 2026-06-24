@@ -91,6 +91,7 @@ export function ConversationStep() {
       {/* 말투/톤 — 예시 발화 미리보기가 있는 시각 카드 */}
       <OptionCards
         label="말투/톤"
+        info="챗봇이 사용자에게 말하는 어투. 기관 성격과 대상 이용자에 맞게 선택하세요."
         value={conv.persona.tone}
         onChange={(v) => update("conversation", { persona: { ...conv.persona, tone: v as (typeof PERSONA_TONES)[number] } })}
         options={TONE_OPTIONS}
@@ -98,12 +99,13 @@ export function ConversationStep() {
       />
       <TextField
         label="화자 (선택)"
+        info="챗봇이 스스로를 소개할 때 쓰는 이름 또는 호칭. 예: OO시 민원 안내봇."
         value={conv.persona.speaker ?? ""}
         onChange={(v) => update("conversation", { persona: { ...conv.persona, speaker: v || undefined } })}
         placeholder="예: OO기관 안내"
       />
 
-      <Field label="주요 시나리오(인텐트)" hint="대표 민원 흐름을 입력해 빈 챗봇을 방지하세요.">
+      <Field label="주요 시나리오(인텐트)" info="챗봇이 처리할 대표 업무 유형 목록. 미리 정의할수록 빈 챗봇 방지에 효과적입니다." hint="대표 민원 흐름을 입력해 빈 챗봇을 방지하세요.">
         <div className="space-y-3">
           {intents.map((it, i) => (
             <div key={i} className="rounded-md border border-border p-3">
@@ -126,6 +128,7 @@ export function ConversationStep() {
               <div className="mt-2">
                 <StringListField
                   label="예시 발화"
+                  info="이 인텐트를 표현하는 실제 사용자 문장 예시. 많을수록 인식 정확도가 높아집니다."
                   value={it.examples ?? []}
                   onChange={(v) => setIntent(i, { examples: v })}
                   placeholder="예: 주민등록등본 어떻게 떼나요?"
@@ -145,6 +148,7 @@ export function ConversationStep() {
 
       <StringListField
         label="빠른 응답(추천 질문)"
+        info="대화창 하단에 버튼으로 표시할 추천 질문. 사용자가 쉽게 시작할 수 있도록 돕습니다."
         value={conv.quickReplies ?? []}
         onChange={(v) => update("conversation", { quickReplies: v })}
       />
@@ -152,6 +156,7 @@ export function ConversationStep() {
       {/* 모르는 질문 처리 방식 — 시각 카드 */}
       <OptionCards
         label="모르는 질문 처리"
+        info="챗봇이 답을 모를 때의 처리 방식. 사과·재질문 유도·상담사 연결 중 선택합니다."
         value={conv.fallback.onUnknown}
         onChange={(v) => update("conversation", { fallback: { ...conv.fallback, onUnknown: v as (typeof FALLBACK_ON_UNKNOWN)[number] } })}
         options={ON_UNKNOWN_OPTIONS}
@@ -160,6 +165,7 @@ export function ConversationStep() {
       {/* 상담사 연결(에스컬레이션) 방식 — 기본값 "none", 시각 카드 */}
       <OptionCards
         label="상담사 연결(에스컬레이션)"
+        info="챗봇이 해결 못 한 문의를 사람 상담원에게 넘기는 방식. 민원 챗봇에서는 설정을 권장합니다."
         value={conv.fallback.handoff ?? "none"}
         onChange={(v) => update("conversation", { fallback: { ...conv.fallback, handoff: v as (typeof HANDOFF_MODES)[number] } })}
         options={HANDOFF_OPTIONS}
@@ -170,12 +176,14 @@ export function ConversationStep() {
         <>
           <NumberField
             label="상담사 연결 목표 응답시간(분, SLA)"
+            info="상담사가 연결 요청에 응답해야 하는 목표 시간(분). SLA 문서에 명시할 기준값입니다."
             value={conv.fallback.handoffSlaMin}
             onChange={(v) => update("conversation", { fallback: { ...conv.fallback, handoffSlaMin: v } })}
             hint="예: 5 (5분 내 상담사 연결 목표)"
           />
           <ToggleField
             label="대기열 순번/예상 대기시간 표시"
+            info="상담사 연결 대기 중 현재 순번과 예상 대기 시간을 사용자에게 표시합니다."
             checked={conv.fallback.showQueue}
             onChange={(v) => update("conversation", { fallback: { ...conv.fallback, showQueue: v } })}
           />
@@ -185,12 +193,14 @@ export function ConversationStep() {
       {/* 운영 시간 + 운영시간 외 안내 */}
       <TextField
         label="운영 시간 (선택)"
+        info="챗봇·상담 서비스가 활성화되는 시간대. 운영 외 시간에는 별도 안내 문구를 표시합니다."
         value={conv.fallback.operatingHours ?? ""}
         onChange={(v) => update("conversation", { fallback: { ...conv.fallback, operatingHours: v || undefined } })}
         placeholder="예: 평일 09:00-18:00 (주말·공휴일 휴무)"
       />
       <TextField
         label="운영 시간 외 안내 문구 (선택)"
+        info="운영 시간 외에 접속한 사용자에게 보여줄 메시지. 대체 연락 채널을 안내할 수 있습니다."
         value={conv.fallback.offHoursMessage ?? ""}
         onChange={(v) => update("conversation", { fallback: { ...conv.fallback, offHoursMessage: v || undefined } })}
         placeholder="예: 지금은 운영 시간이 아닙니다. 평일 09시 이후 다시 문의해 주세요."

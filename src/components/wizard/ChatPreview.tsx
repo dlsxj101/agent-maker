@@ -7,13 +7,59 @@
  * 산출물의 styles.css 와 동일한 토큰 의미를 쓰되, 여기서는 인라인 style 로 즉시 반영한다.
  */
 
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useWizardStore } from "@/lib/store";
 import { fontFamily } from "@/generators/tokens";
+
+const GREETING = "안녕하세요. 무엇을 도와드릴까요?";
+
+/** prefers-reduced-motion 구독 — effect 내 setState 없이 외부 스토어로 읽는다. */
+function usePrefersReducedMotion() {
+  return useSyncExternalStore(
+    (cb) => {
+      const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+      mq.addEventListener("change", cb);
+      return () => mq.removeEventListener("change", cb);
+    },
+    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    () => false, // 서버 스냅샷(모션 허용 가정)
+  );
+}
+
+/**
+ * 봇 인사말을 한 글자씩 생성하는 타이핑(스트리밍) 효과. 끝까지 친 뒤 잠깐 멈췄다 반복.
+ * reduced-motion 이면 애니메이션을 돌리지 않고 렌더에서 전체 문장을 표시한다. (PLAN.md §2)
+ */
+function useTypewriter(reduce: boolean) {
+  const [typed, setTyped] = useState(0);
+  useEffect(() => {
+    if (reduce) return; // 렌더에서 전체 표시 — effect 내 동기 setState 회피
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const run = (i: number) => {
+      if (cancelled) return;
+      setTyped(i);
+      if (i < GREETING.length) timer = setTimeout(() => run(i + 1), 42);
+      else timer = setTimeout(() => run(0), 2800); // 완성 후 잠시 멈췄다 다시
+    };
+    timer = setTimeout(() => run(0), 450);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [reduce]);
+  return typed;
+}
 
 export function ChatPreview() {
   const design = useWizardStore((s) => s.spec.design);
   const name = useWizardStore((s) => s.spec.project.name);
   const { colors, widgetStyle, fonts } = design;
+
+  const reduce = usePrefersReducedMotion();
+  const typedRaw = useTypewriter(reduce);
+  const typed = reduce ? GREETING.length : typedRaw;
+  const typing = !reduce && typedRaw < GREETING.length;
 
   const radius =
     widgetStyle.bubbleRadius === "sharp" ? 2 : widgetStyle.bubbleRadius === "pill" ? 9999 : 12;
@@ -67,6 +113,7 @@ export function ChatPreview() {
           <div
             style={{
               maxWidth: "80%",
+              minHeight: "1.4em",
               padding: pad,
               borderRadius: radius,
               background: colors.background,
@@ -74,7 +121,8 @@ export function ChatPreview() {
               fontSize: 13,
             }}
           >
-            안녕하세요. 무엇을 도와드릴까요?
+            {GREETING.slice(0, typed)}
+            {typing && <span className="type-caret" aria-hidden />}
           </div>
         </div>
         {/* 사용자 */}

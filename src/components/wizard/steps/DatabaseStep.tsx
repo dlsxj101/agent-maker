@@ -92,6 +92,7 @@ export function DatabaseStep() {
       {/* 관계형 DB */}
       <OptionCards<(typeof RDB_OPTIONS)[number]>
         label="🗄 관계형 DB (국산 포함)"
+        info="구조화된 데이터(사용자·설정·이력 등)를 저장하는 DB. Tibero는 국산 조달 대응에 유리하다."
         value={db.rdb}
         onChange={(v) => update("database", { rdb: v })}
         options={RDB_OPTIONS.map((r) => ({
@@ -105,6 +106,7 @@ export function DatabaseStep() {
       {/* 대화 이력 저장 */}
       <OptionCards<(typeof HISTORY_OPTIONS)[number]>
         label="💬 대화 이력 저장"
+        info="챗봇과의 대화 내용을 영구 보관하는 방식. 이력을 저장하면 맥락 유지·감사 추적이 가능하다."
         value={db.history}
         onChange={(v) => update("database", { history: v })}
         options={HISTORY_OPTIONS.map((h) => ({
@@ -118,6 +120,7 @@ export function DatabaseStep() {
       {/* 캐시 — cache 필드는 optional(undefined 가능)이므로 ?? "none" 으로 기본값 처리 */}
       <OptionCards<(typeof CACHE_OPTIONS)[number]>
         label="⚡ 캐시"
+        info="자주 쓰는 데이터를 메모리에 올려 응답 속도를 높인다. Redis는 임베딩 결과 재사용에도 활용된다."
         value={db.cache ?? "none"}
         onChange={(v) => update("database", { cache: v })}
         options={CACHE_OPTIONS.map((c) => ({
@@ -131,6 +134,7 @@ export function DatabaseStep() {
       {/* 파일/문서 저장소 */}
       <OptionCards<(typeof FILE_STORE_OPTIONS)[number]>
         label="📂 파일/문서 저장소"
+        info="RAG용 문서·첨부 파일을 보관하는 저장소. 폐쇄망이면 로컬·온프레미스 스토리지를 선택해야 한다."
         value={db.fileStore}
         onChange={(v) => update("database", { fileStore: v })}
         options={FILE_STORE_OPTIONS.map((f) => ({

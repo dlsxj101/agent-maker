@@ -48,7 +48,7 @@ export default function Home() {
           {WIZARD_STEPS.map((step, i) => (
             <li
               key={step.id}
-              className="flex items-start gap-4 border-b border-hairline py-3.5"
+              className="-mx-3 flex items-start gap-4 rounded-md border-b border-hairline px-3 py-3.5 transition-colors duration-150 hover:bg-surface-2"
             >
               <span className="mono mt-0.5 text-xs text-primary tabular-nums">
                 {String(i).padStart(2, "0")}
@@ -73,7 +73,7 @@ export default function Home() {
 /** 산출물 미리보기 카드 — 에디터/터미널 느낌의 mono spec-peek */
 function SpecPeek() {
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+    <div className="hover-lift overflow-hidden rounded-lg border border-border bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
       <div className="flex items-center gap-2 border-b border-hairline bg-surface-2 px-3 py-2">
         <span className="flex gap-1.5" aria-hidden>
           <span className="h-2.5 w-2.5 rounded-full bg-border" />

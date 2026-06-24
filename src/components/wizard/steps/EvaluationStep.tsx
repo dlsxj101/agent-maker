@@ -21,7 +21,7 @@ export function EvaluationStep() {
 
   return (
     <div className="space-y-6">
-      <Field label="골든셋 (대표 질문 – 기대 근거)" hint="산출물 테스트로 포함되어 챗봇 자체 검증에 쓰입니다.">
+      <Field label="골든셋 (대표 질문 – 기대 근거)" hint="산출물 테스트로 포함되어 챗봇 자체 검증에 쓰입니다." info="대표 질문과 기대 근거 쌍. 납품 전 챗봇 품질을 자동으로 검증하는 기준이 된다.">
         <div className="space-y-2">
           {testset.map((c, i) => (
             <div key={i} className="space-y-1 rounded-md border border-border p-3">
@@ -64,6 +64,7 @@ export function EvaluationStep() {
         value={evaluation.metrics}
         onChange={(v) => update("evaluation", { metrics: v as typeof evaluation.metrics })}
         options={EVAL_METRICS.map((m) => [m, METRIC_LABELS[m] ?? m])}
+        info="챗봇 성능을 측정할 항목. 선택한 지표가 자동 테스트 리포트에 포함된다."
       />
 
       <div className="grid grid-cols-2 gap-3">
@@ -72,11 +73,13 @@ export function EvaluationStep() {
           value={evaluation.acceptance?.minRetrievalHit}
           onChange={(v) => update("evaluation", { acceptance: { ...evaluation.acceptance, minRetrievalHit: v } })}
           hint="예: 0.8"
+          info="올바른 문서를 찾아낸 비율의 최소 기준. 납품 합격 여부를 판단한다."
         />
         <NumberField
           label="합격선: 인용 정확도"
           value={evaluation.acceptance?.minCitationAccuracy}
           onChange={(v) => update("evaluation", { acceptance: { ...evaluation.acceptance, minCitationAccuracy: v } })}
+          info="답변에 올바른 근거를 인용한 비율의 최소 기준. 0~1 사이 소수로 입력한다."
         />
       </div>
 
@@ -84,6 +87,7 @@ export function EvaluationStep() {
         label="A/B 응답 비교 (프롬프트/모델 변형 평가)"
         checked={evaluation.abTesting}
         onChange={(v) => update("evaluation", { abTesting: v })}
+        info="두 가지 프롬프트나 모델을 나란히 비교해 더 좋은 구성을 선택하는 데 도움을 준다."
       />
     </div>
   );
