@@ -330,9 +330,76 @@ interaction: {
 
 ---
 
-## 10. `agent` — 에이전트 능력 & 컨텍스트 & 안전 (신규)
+## 10. `presentation` — UI 연출 (스트리밍·도구호출·모션, 신규)
 
-> "무엇을 할 수 있나". §7 llm(추론 엔진)·§9 interaction(UX) 과 별개로 **에이전트의 능력·컨텍스트 관리·안전**.
+> §9 `interaction`(on/off·속도·노출수준)과 짝을 이루는 **시각 연출** 레이어.
+> "어떻게 움직이고 보이나" — 스트리밍 토큰 등장 방식, 도구 호출 진행 표현, 말풍선 등장 효과를 담는다.
+> 모든 필드 기본값 있음(필수 없음). `prefers-reduced-motion` 시 애니메이션 전체 비활성.
+
+```
+presentation: {
+  stream: {
+    animation: enum{                   # 스트리밍 글자 생성 애니메이션
+      typewriter |                     # 한 글자씩 타이핑 (기본)
+      fade-in-words |                  # 단어 단위 페이드인
+      blur-in |                        # 블러 → 선명
+      slide-up |                       # 아래서 위로 슬라이드
+      none                             # 즉시 표시
+    }
+    cursor: enum{                      # 생성 중 커서(캐럿) 글리프
+      bar |                            # | 세로선 (기본)
+      block |                          # ▌ 블록
+      underscore |                     # _ 밑줄
+      none                             # 커서 없음
+    }
+  }
+  toolCall: {
+    ui: enum{                          # 도구 호출 표시 컴포넌트
+      inline-status |                  # 인라인 상태 텍스트
+      card |                           # 카드형 (기본)
+      timeline |                       # 타임라인
+      terminal |                       # 터미널 스타일
+      chips                            # 칩/태그형
+    }
+    animation: enum{                   # 도구 실행 진행 연출
+      none |
+      pulse |                          # 펄스
+      spinner |                        # 스피너 (기본)
+      progress |                       # 프로그레스바
+      stagger                          # 순차 등장
+    }
+    showArgs: boolean                  # 도구 인자 표시 (기본 true)
+    showResult: boolean                # 도구 결과 표시 (기본 true)
+  }
+  motion: {
+    messageEntrance: enum{             # 메시지 말풍선 등장 애니메이션
+      none |
+      fade |                           # 페이드인
+      fade-up |                        # 아래서 위로 페이드인 (기본)
+      pop |                            # 팝
+      slide                            # 슬라이드
+    }
+    pacing: enum{                      # 전체 모션 속도감
+      instant |                        # 즉시
+      snappy |                         # 빠름
+      smooth |                         # 보통 (기본)
+      relaxed                          # 느긋
+    }
+  }
+}
+```
+
+> **합성/연계**: `stream`은 §9 `interaction.streaming`(enabled·speed)와 함께, `toolCall`은
+> `interaction.agentMode=tool-agent` + `interaction.rendering.toolCallDisplay`(hidden/collapsed/expanded 노출수준)와 함께 동작한다.
+>
+> **산출물 반영**: 생성되는 챗봇의 `public/styles.css`(키프레임·`--pace` 변수)와
+> `public/app.js`(스트리밍 토큰·커서·도구호출 렌더)에 실제 구현되어 들어간다.
+
+---
+
+## 11. `agent` — 에이전트 능력 & 컨텍스트 & 안전 (신규)
+
+> "무엇을 할 수 있나". §7 llm(추론 엔진)·§9 interaction(UX)·§10 presentation(연출) 과 별개로 **에이전트의 능력·컨텍스트 관리·안전**.
 > 모든 필드 기본값 있음(필수 없음). 안전은 §7 `llm.guardrails`(groundedOnly·piiFilter·bannedTopics)를 보완.
 
 ```
@@ -367,7 +434,7 @@ agent: {
 
 ---
 
-## 11. `integrations` — 연동 & API
+## 12. `integrations` — 연동 & API
 
 ```
 integrations: {
@@ -386,10 +453,10 @@ integrations: {
 
 ---
 
-## 12. `evaluation` — 평가 & 테스트 (납품 품질 보증)
+## 13. `evaluation` — 평가 & 테스트 (납품 품질 보증)
 
 > "한 방에" 만든 결과의 품질을 잴 수 없으면 공공기관 납품 리스크. 산출물에 테스트셋·E2E 테스트
-> 골격을 포함해 생성될 챗봇이 자체 검증할 수 있게 한다. (PLAN.md §4 Step 9)
+> 골격을 포함해 생성될 챗봇이 자체 검증할 수 있게 한다. (PLAN.md §4 Step 12)
 
 ```
 evaluation: {
@@ -414,7 +481,7 @@ evaluation: {
 
 ---
 
-## 13. `compliance` — 컴플라이언스 (공공기관 필수)
+## 14. `compliance` — 컴플라이언스 (공공기관 필수)
 
 ```
 compliance: {
@@ -443,7 +510,7 @@ compliance: {
 
 ---
 
-## 14. `ops` — 운영 · 관측 (compliance에서 분리)
+## 15. `ops` — 운영 · 관측 (compliance에서 분리)
 
 ```
 ops: {

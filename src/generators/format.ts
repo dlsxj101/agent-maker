@@ -133,6 +133,25 @@ const LABELS_KO: Record<string, Record<string, string>> = {
     clova: "네이버 클로바(클라우드)",
     google: "Google(클라우드)",
   },
+  // §10 presentation — UI 연출
+  streamAnimation: {
+    typewriter: "타자기",
+    "fade-in-words": "단어 페이드",
+    "blur-in": "블러 인",
+    "slide-up": "슬라이드 업",
+    none: "즉시",
+  },
+  streamCursor: { bar: "막대 ▏", block: "블록 █", underscore: "밑줄 _", none: "없음" },
+  toolCallUi: {
+    "inline-status": "인라인 상태",
+    card: "접힘 카드",
+    timeline: "타임라인",
+    terminal: "터미널 로그",
+    chips: "도구 칩",
+  },
+  toolCallAnimation: { none: "없음", pulse: "점멸", spinner: "스피너", progress: "진행 바", stagger: "순차 등장" },
+  messageEntrance: { none: "없음", fade: "페이드", "fade-up": "페이드 업", pop: "팝", slide: "슬라이드" },
+  motionPacing: { instant: "즉시", snappy: "빠릿", smooth: "부드럽게", relaxed: "느긋" },
 };
 
 /** enum id → 영어 라벨 사전 */
@@ -258,6 +277,25 @@ const LABELS_EN: Record<string, Record<string, string>> = {
     clova: "Naver CLOVA (cloud)",
     google: "Google (cloud)",
   },
+  // §10 presentation — UI presentation
+  streamAnimation: {
+    typewriter: "Typewriter",
+    "fade-in-words": "Fade-in words",
+    "blur-in": "Blur in",
+    "slide-up": "Slide up",
+    none: "Instant",
+  },
+  streamCursor: { bar: "Bar ▏", block: "Block █", underscore: "Underscore _", none: "None" },
+  toolCallUi: {
+    "inline-status": "Inline status",
+    card: "Collapsible card",
+    timeline: "Timeline",
+    terminal: "Terminal log",
+    chips: "Tool chips",
+  },
+  toolCallAnimation: { none: "None", pulse: "Pulse", spinner: "Spinner", progress: "Progress bar", stagger: "Stagger" },
+  messageEntrance: { none: "None", fade: "Fade", "fade-up": "Fade up", pop: "Pop", slide: "Slide" },
+  motionPacing: { instant: "Instant", snappy: "Snappy", smooth: "Smooth", relaxed: "Relaxed" },
 };
 
 /** 언어별 라벨 사전 선택 */

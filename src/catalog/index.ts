@@ -11,5 +11,6 @@ export * from "./llm";
 export * from "./rag";
 export * from "./backend";
 export * from "./interaction";
+export * from "./presentation";
 export * from "./voice";
 export * from "./agent";

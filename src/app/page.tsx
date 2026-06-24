@@ -2,7 +2,7 @@ import Link from "next/link";
 import { WIZARD_STEPS } from "@/catalog/steps";
 
 /**
- * 랜딩. thesis(결정 → 기계가 읽는 정본 산출물) + 12단계 시퀀스 + 진입.
+ * 랜딩. thesis(결정 → 기계가 읽는 정본 산출물) + 단계 시퀀스 + 진입.
  * 디자인: 절제된 개발자 도구형 (docs/app-design.md).
  */
 export default function Home() {
@@ -30,7 +30,7 @@ export default function Home() {
             >
               구성 시작 →
             </Link>
-            <span className="text-xs text-muted">12단계 · 브라우저에서 ZIP 생성 · 서버 불필요</span>
+            <span className="text-xs text-muted">{WIZARD_STEPS.length}단계 · 브라우저에서 ZIP 생성 · 서버 불필요</span>
           </div>
         </div>
 
@@ -42,7 +42,7 @@ export default function Home() {
       <section className="border-t border-hairline py-12">
         <div className="flex items-baseline justify-between">
           <h2 className="text-sm font-semibold">무엇을 결정하나</h2>
-          <span className="eyebrow">12 steps</span>
+          <span className="eyebrow">{WIZARD_STEPS.length} steps</span>
         </div>
         <ol className="mt-6 grid grid-cols-1 gap-x-10 gap-y-px sm:grid-cols-2">
           {WIZARD_STEPS.map((step, i) => (

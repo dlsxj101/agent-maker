@@ -458,6 +458,13 @@ export function renderDesignMd(spec: AgentSpec): string {
 - ${ds.widget_input}: ${widgetStyle.inputStyle}
 - ${ds.widget_density}: ${widgetStyle.density}
 
+## ${ds.sec_motion}
+
+- ${ds.motion_stream}: ${label("streamAnimation", spec.presentation.stream.animation, lang)} · ${ds.motion_cursor}: ${label("streamCursor", spec.presentation.stream.cursor, lang)}
+- ${ds.motion_toolui}: ${label("toolCallUi", spec.presentation.toolCall.ui, lang)} · ${ds.motion_toolanim}: ${label("toolCallAnimation", spec.presentation.toolCall.animation, lang)}
+- ${ds.motion_entrance}: ${label("messageEntrance", spec.presentation.motion.messageEntrance, lang)} · ${ds.motion_pacing}: ${label("motionPacing", spec.presentation.motion.pacing, lang)}
+- ${ds.motion_note}
+
 ## ${ds.sec_css}
 
 \`\`\`css

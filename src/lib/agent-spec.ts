@@ -127,7 +127,16 @@ export const MODALITIES = ["image-input", "file-upload", "voice-input", "voice-o
 export const OUTPUT_LENGTHS = ["brief", "balanced", "detailed"] as const;
 export const STRUCTURED_OUTPUTS = ["none", "sections", "table", "json"] as const;
 
-// §10 agent — 에이전트 능력 & 컨텍스트 & 안전
+// §10 presentation — UI 연출 (스트리밍 글자생성 · 도구호출 표시 · 모션)
+// 시각 스타일/애니메이션 차원. interaction(§9)의 on/off·속도·노출수준과 합성된다.
+export const STREAM_ANIMATIONS = ["typewriter", "fade-in-words", "blur-in", "slide-up", "none"] as const;
+export const STREAM_CURSORS = ["bar", "block", "underscore", "none"] as const;
+export const TOOLCALL_UIS = ["inline-status", "card", "timeline", "terminal", "chips"] as const;
+export const TOOLCALL_ANIMATIONS = ["none", "pulse", "spinner", "progress", "stagger"] as const;
+export const MESSAGE_ENTRANCES = ["none", "fade", "fade-up", "pop", "slide"] as const;
+export const MOTION_PACINGS = ["instant", "snappy", "smooth", "relaxed"] as const;
+
+// §11 agent — 에이전트 능력 & 컨텍스트 & 안전
 export const BUILTIN_TOOLS = [
   "web-search",
   "code-interpreter",
@@ -518,7 +527,42 @@ const InteractionSchema = z
   .prefault({});
 
 /* -------------------------------------------------------------------------- */
-/* §10 agent — 에이전트 능력 & 컨텍스트 & 안전                                  */
+/* §10 presentation — UI 연출 (스트리밍·도구호출·모션)                          */
+/* -------------------------------------------------------------------------- */
+/* 시각 스타일·애니메이션만 담는다(룩이 아니라 "움직임").                          */
+/* 합성: stream 은 interaction.streaming(on/off·속도)와, toolCall 은            */
+/* agentMode=tool-agent + rendering.toolCallDisplay(노출 수준)와 함께 동작한다.  */
+
+const PresentationSchema = z
+  .object({
+    // 스트리밍 글자 생성 애니메이션
+    stream: z
+      .object({
+        animation: z.enum(STREAM_ANIMATIONS).default("typewriter"),
+        cursor: z.enum(STREAM_CURSORS).default("bar"),
+      })
+      .prefault({}),
+    // 도구 호출 표시 UI & 애니메이션
+    toolCall: z
+      .object({
+        ui: z.enum(TOOLCALL_UIS).default("card"),
+        animation: z.enum(TOOLCALL_ANIMATIONS).default("spinner"),
+        showArgs: z.boolean().default(true), // 도구 인자 표시
+        showResult: z.boolean().default(true), // 도구 결과 표시
+      })
+      .prefault({}),
+    // 메시지 등장 / 전체 모션 페이싱
+    motion: z
+      .object({
+        messageEntrance: z.enum(MESSAGE_ENTRANCES).default("fade-up"),
+        pacing: z.enum(MOTION_PACINGS).default("smooth"),
+      })
+      .prefault({}),
+  })
+  .prefault({});
+
+/* -------------------------------------------------------------------------- */
+/* §11 agent — 에이전트 능력 & 컨텍스트 & 안전                                  */
 /* -------------------------------------------------------------------------- */
 
 const AgentSchema = z
@@ -564,7 +608,7 @@ const AgentSchema = z
   .prefault({});
 
 /* -------------------------------------------------------------------------- */
-/* §11 integrations — 연동 & API                                               */
+/* §12 integrations — 연동 & API                                               */
 /* -------------------------------------------------------------------------- */
 
 const IntegrationsSchema = z
@@ -593,7 +637,7 @@ const IntegrationsSchema = z
   .prefault({});
 
 /* -------------------------------------------------------------------------- */
-/* §12 evaluation — 평가 & 테스트 (납품 품질 보증)                             */
+/* §13 evaluation — 평가 & 테스트 (납품 품질 보증)                             */
 /* -------------------------------------------------------------------------- */
 
 const EvaluationSchema = z
@@ -619,7 +663,7 @@ const EvaluationSchema = z
   .prefault({});
 
 /* -------------------------------------------------------------------------- */
-/* §13 compliance — 컴플라이언스 (공공기관 필수)                               */
+/* §14 compliance — 컴플라이언스 (공공기관 필수)                               */
 /* -------------------------------------------------------------------------- */
 
 const ComplianceSchema = z
@@ -671,7 +715,7 @@ const ComplianceSchema = z
   .prefault({});
 
 /* -------------------------------------------------------------------------- */
-/* §14 ops — 운영 · 관측 (compliance에서 분리)                                 */
+/* §15 ops — 운영 · 관측 (compliance에서 분리)                                 */
 /* -------------------------------------------------------------------------- */
 
 const OpsSchema = z
@@ -722,11 +766,12 @@ export const AgentSpecSchema = z.object({
   llm: LlmSchema, // §7
   conversation: ConversationSchema, // §8
   interaction: InteractionSchema, // §9
-  agent: AgentSchema, // §10
-  integrations: IntegrationsSchema, // §11
-  evaluation: EvaluationSchema, // §12
-  compliance: ComplianceSchema, // §13
-  ops: OpsSchema, // §14
+  presentation: PresentationSchema, // §10 (UI 연출 — 스트리밍·도구호출·모션)
+  agent: AgentSchema, // §11
+  integrations: IntegrationsSchema, // §12
+  evaluation: EvaluationSchema, // §13
+  compliance: ComplianceSchema, // §14
+  ops: OpsSchema, // §15
 });
 
 /** 마법사 전역 상태로 쓰이는 설정 타입 */

@@ -166,6 +166,44 @@ h3 {
   50%, 95% { opacity: 0; }
   100% { opacity: 1; }
 }
+@keyframes am-slide-in {
+  from { opacity: 0; transform: translateX(10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes am-spin {
+  to { transform: rotate(360deg); }
+}
+/* 스트리밍 단어 단위 등장 — UI 연출 프리뷰/산출물 공통 모티프 */
+@keyframes tok-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes tok-blur {
+  from { opacity: 0; filter: blur(6px); }
+  to { opacity: 1; filter: blur(0); }
+}
+@keyframes tok-slide {
+  from { opacity: 0; transform: translateY(0.5em); }
+  to { opacity: 1; transform: translateY(0); }
+}
+/* 토큰(단어) 등장 — animation-name 은 인라인에서 지정, 지속시간은 페이싱 변수 */
+.tok {
+  display: inline;
+  animation-duration: var(--tok-dur, 260ms);
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  animation-fill-mode: both;
+}
+/* 회전 스피너 */
+.am-spinner {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 9999px;
+  animation: am-spin 0.7s linear infinite;
+  vertical-align: -0.1em;
+}
 
 /* 스텝 전환 — 중앙 폼이 바뀔 때 부드럽게 떠오름 */
 .step-enter {

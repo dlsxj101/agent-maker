@@ -21,7 +21,7 @@ import { THEME_PRESETS, FONT_OPTIONS, LLM_MODEL_CATALOG } from "@/catalog";
 describe("AgentSpec 기본값", () => {
   it("빈 객체만으로 모든 섹션이 채워진 초안이 생성된다", () => {
     const spec = createDraftSpec();
-    // §0~§12 전 섹션 키가 존재한다
+    // §0~§15 전 섹션 키가 존재한다
     expect(Object.keys(spec).sort()).toEqual(
       [
         "meta",
@@ -34,6 +34,7 @@ describe("AgentSpec 기본값", () => {
         "llm",
         "conversation",
         "interaction",
+        "presentation",
         "agent",
         "integrations",
         "evaluation",

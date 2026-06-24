@@ -97,6 +97,12 @@ export const toolAgentSpec: AgentSpec = createDraftSpec({
     rendering: { toolCallDisplay: "expanded" },
     inputLimits: { maxChars: 500 },
   },
+  // UI 연출: 비-기본 조합으로 생성기 경로를 검증 (단어모드·타임라인·슬라이드)
+  presentation: {
+    stream: { animation: "fade-in-words", cursor: "block" },
+    toolCall: { ui: "timeline", animation: "stagger" },
+    motion: { messageEntrance: "slide", pacing: "relaxed" },
+  },
   agent: { safety: { rateLimitPerMin: 30, abuseFilter: true } },
   integrations: {
     tools: [

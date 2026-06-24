@@ -9,6 +9,36 @@
 import type { AgentSpec } from "@/lib/agent-spec";
 import type { GeneratedFile } from "../index";
 import { designTokens, tokensToCss } from "../tokens";
+import { PACING_MS } from "@/catalog/presentation";
+
+/** presentation 선택 → 생성 프론트엔드가 쓰는 파생 값 (스트리밍 애니메이션·커서·도구UI·모션) */
+function presentationVars(spec: AgentSpec) {
+  const p = spec.presentation;
+  const entranceKf: Record<string, string> = {
+    none: "",
+    fade: "sc-fade",
+    "fade-up": "sc-fade-up",
+    pop: "sc-pop",
+    slide: "sc-slide",
+  };
+  const tokKf: Record<string, string> = {
+    "fade-in-words": "sc-tok-fade",
+    "blur-in": "sc-tok-blur",
+    "slide-up": "sc-tok-slide",
+  };
+  const cursorGlyph: Record<string, string> = { bar: "▏", block: "█", underscore: "_", none: "" };
+  return {
+    pace: PACING_MS[p.motion.pacing] ?? 260,
+    entrance: entranceKf[p.motion.messageEntrance] ?? "",
+    tok: tokKf[p.stream.animation] ?? "",
+    cursor: cursorGlyph[p.stream.cursor] ?? "",
+    wordMode: p.stream.animation !== "typewriter" && p.stream.animation !== "none",
+    toolUi: p.toolCall.ui,
+    toolAnim: p.toolCall.animation,
+    showArgs: p.toolCall.showArgs,
+    showResult: p.toolCall.showResult,
+  };
+}
 
 /** API 키 없이 추론 서버가 필요한 온프레미스 임베딩 모델 */
 export const ONPREM_EMBEDDINGS = ["bge-m3", "kure", "ko-sroberta", "multilingual-e5"];
@@ -72,6 +102,7 @@ function chatUiHtml(spec: AgentSpec): string {
 
 function chatUiJs(spec: AgentSpec): string {
   const streaming = spec.interaction.streaming.enabled;
+  const pv = presentationVars(spec);
   const session = !spec.llm.session.multiTurn
     ? `const SESSION_ID = undefined;\n`
     : spec.llm.session.resumable
@@ -86,6 +117,10 @@ function chatUiJs(spec: AgentSpec): string {
   add("user", message);
   input.value = "";
   const bot = add("bot", "");
+  const caret = document.createElement("span");
+  caret.className = CURSOR ? "caret" : "caret caret--none";
+  caret.textContent = CURSOR;
+  bot.appendChild(caret);
   try {
     const res = await fetch("/api/chat/stream", {
       method: "POST",
@@ -106,13 +141,14 @@ function chatUiJs(spec: AgentSpec): string {
         if (!line) continue;
         try {
           const ev = JSON.parse(line.slice(5).trim());
-          if (ev.trace) add("trace", "🔧 도구 호출: " + ev.trace.tool);
-          if (ev.delta) bot.textContent += ev.delta;
+          if (ev.trace) addTrace(ev.trace);
+          if (ev.delta) appendDelta(bot, caret, ev.delta);
           if (ev.sources) addSources(ev.sources);
         } catch (_) { /* skip */ }
       }
       log.scrollTop = log.scrollHeight;
     }
+    caret.remove();
   } catch (_) {
     bot.textContent = "오류가 발생했습니다.";
   }
@@ -137,6 +173,12 @@ function chatUiJs(spec: AgentSpec): string {
   }
 });`;
   return `// 최소 채팅 UI — ${streaming ? "/api/chat/stream (SSE 스트리밍)" : "/api/chat"} 호출. (PROMPT.md 지시로 디자인/접근성을 다듬는다)
+// UI 연출(presentation): 스트리밍="${spec.presentation.stream.animation}" 커서="${spec.presentation.stream.cursor}" 도구UI="${pv.toolUi}" 등장="${spec.presentation.motion.messageEntrance}". 스타일은 styles.css.
+const STREAM_ANIM = "${spec.presentation.stream.animation}";
+const CURSOR = "${pv.cursor}"; // "" 면 커서 표시 안 함
+const WORD_MODE = ${pv.wordMode}; // 단어 단위 등장 애니메이션 여부
+const TOOL_UI = "${pv.toolUi}";
+const TOOL_ANIM = "${pv.toolAnim}";
 ${session}const form = document.getElementById("form");
 const log = document.getElementById("log");
 const input = document.getElementById("msg");
@@ -148,6 +190,64 @@ function add(role, text) {
   log.appendChild(el);
   log.scrollTop = log.scrollHeight;
   return el;
+}
+
+// 스트리밍 델타 누적 — 단어 모드면 토큰 span 으로 감싸 등장 애니메이션, 아니면 텍스트 누적. 커서 앞에 삽입.
+function appendDelta(bubble, caret, delta) {
+  if (WORD_MODE) {
+    const s = document.createElement("span");
+    s.className = "tok";
+    s.textContent = delta;
+    bubble.insertBefore(s, caret);
+  } else {
+    bubble.insertBefore(document.createTextNode(delta), caret);
+  }
+  log.scrollTop = log.scrollHeight;
+}
+
+// 도구 호출 표시 — TOOL_UI 연출에 맞춰 렌더. (각 SSE trace 이벤트가 한 단계)
+function addTrace(t) {
+  const tool = (t && t.tool) || "tool";
+  const wrap = document.createElement("div");
+  wrap.className = "trace trace--" + TOOL_UI;
+  if (TOOL_ANIM === "spinner") {
+    const sp = document.createElement("span");
+    sp.className = "sc-spinner";
+    wrap.appendChild(sp);
+  } else if (TOOL_ANIM === "pulse") {
+    const sp = document.createElement("span");
+    sp.className = "sc-pulse";
+    sp.textContent = "●";
+    wrap.appendChild(sp);
+  }
+  if (TOOL_UI === "chips") {
+    const c = document.createElement("span");
+    c.className = "chip";
+    c.textContent = "🔧 " + tool;
+    wrap.appendChild(c);
+  } else if (TOOL_UI === "terminal") {
+    const code = document.createElement("span");
+    code.textContent = "$ " + tool + "()";
+    wrap.appendChild(code);
+  } else if (TOOL_UI === "inline-status") {
+    const s = document.createElement("span");
+    s.textContent = "🔧 " + tool + " 실행 중…";
+    wrap.appendChild(s);
+  } else if (TOOL_UI === "timeline") {
+    const dot = document.createElement("span");
+    dot.className = "trace__dot";
+    wrap.appendChild(dot);
+    const s = document.createElement("span");
+    s.textContent = tool;
+    wrap.appendChild(s);
+  } else {
+    // card
+    const s = document.createElement("span");
+    s.textContent = "⚙ 도구 호출: " + tool;
+    wrap.appendChild(s);
+  }
+  log.appendChild(wrap);
+  log.scrollTop = log.scrollHeight;
 }
 
 // 출처(인용) 칩 렌더 — citationStyle 에 맞게 다듬는다.
@@ -170,6 +270,36 @@ ${handler}
 }
 
 function stylesCss(spec: AgentSpec): string {
+  const pv = presentationVars(spec);
+  // UI 연출(presentation) CSS — 메시지 등장·스트리밍 토큰·커서·도구호출 UI.
+  const presentationCss = `
+/* ===== UI 연출 (presentation) — 페이싱 ${pv.pace}ms ===== */
+:root { --pace: ${pv.pace}ms; }
+@keyframes sc-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sc-fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes sc-pop { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
+@keyframes sc-slide { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes sc-blink { 0%,45% { opacity: 1; } 50%,95% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes sc-tok-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sc-tok-blur { from { opacity: 0; filter: blur(6px); } to { opacity: 1; filter: blur(0); } }
+@keyframes sc-tok-slide { from { opacity: 0; transform: translateY(.5em); } to { opacity: 1; transform: translateY(0); } }
+@keyframes sc-spin { to { transform: rotate(360deg); } }
+/* 메시지 등장: ${spec.presentation.motion.messageEntrance} */
+${pv.entrance ? `.bubble, .trace, .sources { animation: ${pv.entrance} var(--pace) cubic-bezier(.22,1,.36,1) both; }` : "/* 등장 애니메이션 없음 */"}
+/* 스트리밍 글자 생성: ${spec.presentation.stream.animation} (단어모드=${pv.wordMode}) */
+${pv.tok ? `.tok { display: inline; animation: ${pv.tok} var(--pace) cubic-bezier(.22,1,.36,1) both; }` : ".tok { display: inline; }"}
+.caret { animation: sc-blink 1s step-end infinite; margin-left: 1px; }
+.caret--none { display: none; }
+/* 진행 인디케이터 */
+.sc-spinner { display: inline-block; width: 12px; height: 12px; margin-right: 6px; border: 2px solid var(--color-accent); border-right-color: transparent; border-radius: 50%; vertical-align: -2px; animation: sc-spin .7s linear infinite; }
+.sc-pulse { display: inline-block; margin-right: 6px; color: var(--color-accent); animation: sc-blink 1.2s ease-in-out infinite; }
+/* 도구 호출 UI: ${pv.toolUi} */
+.trace { align-self: flex-start; max-width: 80%; display: flex; align-items: center; gap: 6px; padding: 8px 12px; border: 1px dashed var(--color-border); border-radius: 8px; color: var(--color-muted); font-size: 12px; }
+.trace--terminal { font-family: var(--font-mono, monospace); background: #0d1117; color: #c9d1d9; border-style: solid; }
+.trace--chips { border: none; padding: 0 4px; }
+.trace--inline-status { border: none; padding: 2px 4px; }
+.trace--timeline .trace__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-accent); flex: none; }
+`;
   // 레이아웃(design.layout)을 컨테이너 CSS 로 반영한다.
   const layoutCss =
     spec.design.layout === "floating-widget"
@@ -198,6 +328,10 @@ ${layoutCss}
 .chat__input { flex: 1; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 8px; font: inherit; }
 .chat__send { padding: 10px 16px; border: none; border-radius: 8px; background: var(--color-accent); color: #fff; cursor: pointer; }
 .chat__send:focus-visible, .chat__input:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+${presentationCss}
+@media (prefers-reduced-motion: reduce) {
+  .bubble, .trace, .sources, .tok, .caret, .sc-spinner, .sc-pulse { animation: none !important; }
+}
 `;
 }
 

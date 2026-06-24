@@ -137,6 +137,13 @@ dist/
 - 입력창 형태: box
 - 밀도: comfortable
 
+## UI 연출 (스트리밍·도구호출·모션)
+
+- 스트리밍 글자 생성: 타자기 · 커서: 막대 ▏
+- 도구 호출 UI: 접힘 카드 · 진행 애니메이션: 스피너
+- 메시지 등장: 페이드 업 · 모션 페이싱: 부드럽게
+- 위 연출은 \`public/styles.css\`(키프레임·\`--pace\`)와 \`public/app.js\`(스트리밍 토큰·커서·도구호출 렌더)에 이미 반영돼 있다. \`prefers-reduced-motion\` 에서는 애니메이션을 끈다.
+
 ## CSS 변수 (그대로 복사해 사용)
 
 \`\`\`css
@@ -424,6 +431,22 @@ OO부 정보화담당관 챗봇 프로젝트.
     },
     "inputLimits": {}
   },
+  "presentation": {
+    "stream": {
+      "animation": "typewriter",
+      "cursor": "bar"
+    },
+    "toolCall": {
+      "ui": "card",
+      "animation": "spinner",
+      "showArgs": true,
+      "showResult": true
+    },
+    "motion": {
+      "messageEntrance": "fade-up",
+      "pacing": "smooth"
+    }
+  },
   "agent": {
     "askUser": false,
     "subAgents": {
@@ -508,6 +531,12 @@ OO부 정보화담당관 챗봇 프로젝트.
 }
 ",
   "public/app.js": "// 최소 채팅 UI — /api/chat/stream (SSE 스트리밍) 호출. (PROMPT.md 지시로 디자인/접근성을 다듬는다)
+// UI 연출(presentation): 스트리밍="typewriter" 커서="bar" 도구UI="card" 등장="fade-up". 스타일은 styles.css.
+const STREAM_ANIM = "typewriter";
+const CURSOR = "▏"; // "" 면 커서 표시 안 함
+const WORD_MODE = false; // 단어 단위 등장 애니메이션 여부
+const TOOL_UI = "card";
+const TOOL_ANIM = "spinner";
 const SESSION_ID = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now());
 const form = document.getElementById("form");
 const log = document.getElementById("log");
@@ -520,6 +549,64 @@ function add(role, text) {
   log.appendChild(el);
   log.scrollTop = log.scrollHeight;
   return el;
+}
+
+// 스트리밍 델타 누적 — 단어 모드면 토큰 span 으로 감싸 등장 애니메이션, 아니면 텍스트 누적. 커서 앞에 삽입.
+function appendDelta(bubble, caret, delta) {
+  if (WORD_MODE) {
+    const s = document.createElement("span");
+    s.className = "tok";
+    s.textContent = delta;
+    bubble.insertBefore(s, caret);
+  } else {
+    bubble.insertBefore(document.createTextNode(delta), caret);
+  }
+  log.scrollTop = log.scrollHeight;
+}
+
+// 도구 호출 표시 — TOOL_UI 연출에 맞춰 렌더. (각 SSE trace 이벤트가 한 단계)
+function addTrace(t) {
+  const tool = (t && t.tool) || "tool";
+  const wrap = document.createElement("div");
+  wrap.className = "trace trace--" + TOOL_UI;
+  if (TOOL_ANIM === "spinner") {
+    const sp = document.createElement("span");
+    sp.className = "sc-spinner";
+    wrap.appendChild(sp);
+  } else if (TOOL_ANIM === "pulse") {
+    const sp = document.createElement("span");
+    sp.className = "sc-pulse";
+    sp.textContent = "●";
+    wrap.appendChild(sp);
+  }
+  if (TOOL_UI === "chips") {
+    const c = document.createElement("span");
+    c.className = "chip";
+    c.textContent = "🔧 " + tool;
+    wrap.appendChild(c);
+  } else if (TOOL_UI === "terminal") {
+    const code = document.createElement("span");
+    code.textContent = "$ " + tool + "()";
+    wrap.appendChild(code);
+  } else if (TOOL_UI === "inline-status") {
+    const s = document.createElement("span");
+    s.textContent = "🔧 " + tool + " 실행 중…";
+    wrap.appendChild(s);
+  } else if (TOOL_UI === "timeline") {
+    const dot = document.createElement("span");
+    dot.className = "trace__dot";
+    wrap.appendChild(dot);
+    const s = document.createElement("span");
+    s.textContent = tool;
+    wrap.appendChild(s);
+  } else {
+    // card
+    const s = document.createElement("span");
+    s.textContent = "⚙ 도구 호출: " + tool;
+    wrap.appendChild(s);
+  }
+  log.appendChild(wrap);
+  log.scrollTop = log.scrollHeight;
 }
 
 // 출처(인용) 칩 렌더 — citationStyle 에 맞게 다듬는다.
@@ -544,6 +631,10 @@ form.addEventListener("submit", async (e) => {
   add("user", message);
   input.value = "";
   const bot = add("bot", "");
+  const caret = document.createElement("span");
+  caret.className = CURSOR ? "caret" : "caret caret--none";
+  caret.textContent = CURSOR;
+  bot.appendChild(caret);
   try {
     const res = await fetch("/api/chat/stream", {
       method: "POST",
@@ -564,13 +655,14 @@ form.addEventListener("submit", async (e) => {
         if (!line) continue;
         try {
           const ev = JSON.parse(line.slice(5).trim());
-          if (ev.trace) add("trace", "🔧 도구 호출: " + ev.trace.tool);
-          if (ev.delta) bot.textContent += ev.delta;
+          if (ev.trace) addTrace(ev.trace);
+          if (ev.delta) appendDelta(bot, caret, ev.delta);
           if (ev.sources) addSources(ev.sources);
         } catch (_) { /* skip */ }
       }
       log.scrollTop = log.scrollHeight;
     }
+    caret.remove();
   } catch (_) {
     bot.textContent = "오류가 발생했습니다.";
   }
@@ -631,6 +723,37 @@ body { margin: 0; font-family: var(--font-body); color: var(--color-text); backg
 .chat__input { flex: 1; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 8px; font: inherit; }
 .chat__send { padding: 10px 16px; border: none; border-radius: 8px; background: var(--color-accent); color: #fff; cursor: pointer; }
 .chat__send:focus-visible, .chat__input:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+/* ===== UI 연출 (presentation) — 페이싱 260ms ===== */
+:root { --pace: 260ms; }
+@keyframes sc-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sc-fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes sc-pop { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
+@keyframes sc-slide { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes sc-blink { 0%,45% { opacity: 1; } 50%,95% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes sc-tok-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sc-tok-blur { from { opacity: 0; filter: blur(6px); } to { opacity: 1; filter: blur(0); } }
+@keyframes sc-tok-slide { from { opacity: 0; transform: translateY(.5em); } to { opacity: 1; transform: translateY(0); } }
+@keyframes sc-spin { to { transform: rotate(360deg); } }
+/* 메시지 등장: fade-up */
+.bubble, .trace, .sources { animation: sc-fade-up var(--pace) cubic-bezier(.22,1,.36,1) both; }
+/* 스트리밍 글자 생성: typewriter (단어모드=false) */
+.tok { display: inline; }
+.caret { animation: sc-blink 1s step-end infinite; margin-left: 1px; }
+.caret--none { display: none; }
+/* 진행 인디케이터 */
+.sc-spinner { display: inline-block; width: 12px; height: 12px; margin-right: 6px; border: 2px solid var(--color-accent); border-right-color: transparent; border-radius: 50%; vertical-align: -2px; animation: sc-spin .7s linear infinite; }
+.sc-pulse { display: inline-block; margin-right: 6px; color: var(--color-accent); animation: sc-blink 1.2s ease-in-out infinite; }
+/* 도구 호출 UI: card */
+.trace { align-self: flex-start; max-width: 80%; display: flex; align-items: center; gap: 6px; padding: 8px 12px; border: 1px dashed var(--color-border); border-radius: 8px; color: var(--color-muted); font-size: 12px; }
+.trace--terminal { font-family: var(--font-mono, monospace); background: #0d1117; color: #c9d1d9; border-style: solid; }
+.trace--chips { border: none; padding: 0 4px; }
+.trace--inline-status { border: none; padding: 2px 4px; }
+.trace--timeline .trace__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-accent); flex: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bubble, .trace, .sources, .tok, .caret, .sc-spinner, .sc-pulse { animation: none !important; }
+}
 ",
   "src/chat.ts": "// 채팅 오케스트레이션: (RAG 검색) → LLM (스트리밍).
 // 동작: rag-cited / 멀티턴: true / 스트리밍: true / 인용: "chips".
@@ -1069,6 +1192,13 @@ dist/
 - 입력창 형태: box
 - 밀도: comfortable
 
+## UI 연출 (스트리밍·도구호출·모션)
+
+- 스트리밍 글자 생성: 타자기 · 커서: 막대 ▏
+- 도구 호출 UI: 접힘 카드 · 진행 애니메이션: 스피너
+- 메시지 등장: 페이드 업 · 모션 페이싱: 부드럽게
+- 위 연출은 \`public/styles.css\`(키프레임·\`--pace\`)와 \`public/app.js\`(스트리밍 토큰·커서·도구호출 렌더)에 이미 반영돼 있다. \`prefers-reduced-motion\` 에서는 애니메이션을 끈다.
+
 ## CSS 변수 (그대로 복사해 사용)
 
 \`\`\`css
@@ -1359,6 +1489,22 @@ OO광역시 민원봉사과 챗봇 프로젝트.
     },
     "inputLimits": {}
   },
+  "presentation": {
+    "stream": {
+      "animation": "typewriter",
+      "cursor": "bar"
+    },
+    "toolCall": {
+      "ui": "card",
+      "animation": "spinner",
+      "showArgs": true,
+      "showResult": true
+    },
+    "motion": {
+      "messageEntrance": "fade-up",
+      "pacing": "smooth"
+    }
+  },
   "agent": {
     "askUser": false,
     "subAgents": {
@@ -1451,6 +1597,12 @@ OO광역시 민원봉사과 챗봇 프로젝트.
 }
 ",
   "public/app.js": "// 최소 채팅 UI — /api/chat/stream (SSE 스트리밍) 호출. (PROMPT.md 지시로 디자인/접근성을 다듬는다)
+// UI 연출(presentation): 스트리밍="typewriter" 커서="bar" 도구UI="card" 등장="fade-up". 스타일은 styles.css.
+const STREAM_ANIM = "typewriter";
+const CURSOR = "▏"; // "" 면 커서 표시 안 함
+const WORD_MODE = false; // 단어 단위 등장 애니메이션 여부
+const TOOL_UI = "card";
+const TOOL_ANIM = "spinner";
 const SESSION_ID = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now());
 const form = document.getElementById("form");
 const log = document.getElementById("log");
@@ -1463,6 +1615,64 @@ function add(role, text) {
   log.appendChild(el);
   log.scrollTop = log.scrollHeight;
   return el;
+}
+
+// 스트리밍 델타 누적 — 단어 모드면 토큰 span 으로 감싸 등장 애니메이션, 아니면 텍스트 누적. 커서 앞에 삽입.
+function appendDelta(bubble, caret, delta) {
+  if (WORD_MODE) {
+    const s = document.createElement("span");
+    s.className = "tok";
+    s.textContent = delta;
+    bubble.insertBefore(s, caret);
+  } else {
+    bubble.insertBefore(document.createTextNode(delta), caret);
+  }
+  log.scrollTop = log.scrollHeight;
+}
+
+// 도구 호출 표시 — TOOL_UI 연출에 맞춰 렌더. (각 SSE trace 이벤트가 한 단계)
+function addTrace(t) {
+  const tool = (t && t.tool) || "tool";
+  const wrap = document.createElement("div");
+  wrap.className = "trace trace--" + TOOL_UI;
+  if (TOOL_ANIM === "spinner") {
+    const sp = document.createElement("span");
+    sp.className = "sc-spinner";
+    wrap.appendChild(sp);
+  } else if (TOOL_ANIM === "pulse") {
+    const sp = document.createElement("span");
+    sp.className = "sc-pulse";
+    sp.textContent = "●";
+    wrap.appendChild(sp);
+  }
+  if (TOOL_UI === "chips") {
+    const c = document.createElement("span");
+    c.className = "chip";
+    c.textContent = "🔧 " + tool;
+    wrap.appendChild(c);
+  } else if (TOOL_UI === "terminal") {
+    const code = document.createElement("span");
+    code.textContent = "$ " + tool + "()";
+    wrap.appendChild(code);
+  } else if (TOOL_UI === "inline-status") {
+    const s = document.createElement("span");
+    s.textContent = "🔧 " + tool + " 실행 중…";
+    wrap.appendChild(s);
+  } else if (TOOL_UI === "timeline") {
+    const dot = document.createElement("span");
+    dot.className = "trace__dot";
+    wrap.appendChild(dot);
+    const s = document.createElement("span");
+    s.textContent = tool;
+    wrap.appendChild(s);
+  } else {
+    // card
+    const s = document.createElement("span");
+    s.textContent = "⚙ 도구 호출: " + tool;
+    wrap.appendChild(s);
+  }
+  log.appendChild(wrap);
+  log.scrollTop = log.scrollHeight;
 }
 
 // 출처(인용) 칩 렌더 — citationStyle 에 맞게 다듬는다.
@@ -1487,6 +1697,10 @@ form.addEventListener("submit", async (e) => {
   add("user", message);
   input.value = "";
   const bot = add("bot", "");
+  const caret = document.createElement("span");
+  caret.className = CURSOR ? "caret" : "caret caret--none";
+  caret.textContent = CURSOR;
+  bot.appendChild(caret);
   try {
     const res = await fetch("/api/chat/stream", {
       method: "POST",
@@ -1507,13 +1721,14 @@ form.addEventListener("submit", async (e) => {
         if (!line) continue;
         try {
           const ev = JSON.parse(line.slice(5).trim());
-          if (ev.trace) add("trace", "🔧 도구 호출: " + ev.trace.tool);
-          if (ev.delta) bot.textContent += ev.delta;
+          if (ev.trace) addTrace(ev.trace);
+          if (ev.delta) appendDelta(bot, caret, ev.delta);
           if (ev.sources) addSources(ev.sources);
         } catch (_) { /* skip */ }
       }
       log.scrollTop = log.scrollHeight;
     }
+    caret.remove();
   } catch (_) {
     bot.textContent = "오류가 발생했습니다.";
   }
@@ -1574,6 +1789,37 @@ body { margin: 0; font-family: var(--font-body); color: var(--color-text); backg
 .chat__input { flex: 1; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 8px; font: inherit; }
 .chat__send { padding: 10px 16px; border: none; border-radius: 8px; background: var(--color-accent); color: #fff; cursor: pointer; }
 .chat__send:focus-visible, .chat__input:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+/* ===== UI 연출 (presentation) — 페이싱 260ms ===== */
+:root { --pace: 260ms; }
+@keyframes sc-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sc-fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes sc-pop { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
+@keyframes sc-slide { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes sc-blink { 0%,45% { opacity: 1; } 50%,95% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes sc-tok-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sc-tok-blur { from { opacity: 0; filter: blur(6px); } to { opacity: 1; filter: blur(0); } }
+@keyframes sc-tok-slide { from { opacity: 0; transform: translateY(.5em); } to { opacity: 1; transform: translateY(0); } }
+@keyframes sc-spin { to { transform: rotate(360deg); } }
+/* 메시지 등장: fade-up */
+.bubble, .trace, .sources { animation: sc-fade-up var(--pace) cubic-bezier(.22,1,.36,1) both; }
+/* 스트리밍 글자 생성: typewriter (단어모드=false) */
+.tok { display: inline; }
+.caret { animation: sc-blink 1s step-end infinite; margin-left: 1px; }
+.caret--none { display: none; }
+/* 진행 인디케이터 */
+.sc-spinner { display: inline-block; width: 12px; height: 12px; margin-right: 6px; border: 2px solid var(--color-accent); border-right-color: transparent; border-radius: 50%; vertical-align: -2px; animation: sc-spin .7s linear infinite; }
+.sc-pulse { display: inline-block; margin-right: 6px; color: var(--color-accent); animation: sc-blink 1.2s ease-in-out infinite; }
+/* 도구 호출 UI: card */
+.trace { align-self: flex-start; max-width: 80%; display: flex; align-items: center; gap: 6px; padding: 8px 12px; border: 1px dashed var(--color-border); border-radius: 8px; color: var(--color-muted); font-size: 12px; }
+.trace--terminal { font-family: var(--font-mono, monospace); background: #0d1117; color: #c9d1d9; border-style: solid; }
+.trace--chips { border: none; padding: 0 4px; }
+.trace--inline-status { border: none; padding: 2px 4px; }
+.trace--timeline .trace__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-accent); flex: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bubble, .trace, .sources, .tok, .caret, .sc-spinner, .sc-pulse { animation: none !important; }
+}
 ",
   "src/chat.ts": "// 채팅 오케스트레이션: (RAG 검색) → LLM (스트리밍).
 // 동작: rag-cited / 멀티턴: true / 스트리밍: true / 인용: "chips".
@@ -2013,6 +2259,13 @@ dist/
 - Input style: box
 - Density: comfortable
 
+## UI Motion (streaming · tool calls · entrance)
+
+- Streaming text generation: Typewriter · Cursor: Bar ▏
+- Tool-call UI: Collapsible card · Progress animation: Spinner
+- Message entrance: Fade up · Motion pacing: Smooth
+- These are already implemented in \`public/styles.css\` (keyframes, \`--pace\`) and \`public/app.js\` (streaming tokens, cursor, tool-call rendering). Animations are disabled under \`prefers-reduced-motion\`.
+
 ## CSS Variables (copy and use as-is)
 
 \`\`\`css
@@ -2303,6 +2556,22 @@ OO광역시 민원봉사과 chatbot project.
     },
     "inputLimits": {}
   },
+  "presentation": {
+    "stream": {
+      "animation": "typewriter",
+      "cursor": "bar"
+    },
+    "toolCall": {
+      "ui": "card",
+      "animation": "spinner",
+      "showArgs": true,
+      "showResult": true
+    },
+    "motion": {
+      "messageEntrance": "fade-up",
+      "pacing": "smooth"
+    }
+  },
   "agent": {
     "askUser": false,
     "subAgents": {
@@ -2395,6 +2664,12 @@ OO광역시 민원봉사과 chatbot project.
 }
 ",
   "public/app.js": "// 최소 채팅 UI — /api/chat/stream (SSE 스트리밍) 호출. (PROMPT.md 지시로 디자인/접근성을 다듬는다)
+// UI 연출(presentation): 스트리밍="typewriter" 커서="bar" 도구UI="card" 등장="fade-up". 스타일은 styles.css.
+const STREAM_ANIM = "typewriter";
+const CURSOR = "▏"; // "" 면 커서 표시 안 함
+const WORD_MODE = false; // 단어 단위 등장 애니메이션 여부
+const TOOL_UI = "card";
+const TOOL_ANIM = "spinner";
 const SESSION_ID = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now());
 const form = document.getElementById("form");
 const log = document.getElementById("log");
@@ -2407,6 +2682,64 @@ function add(role, text) {
   log.appendChild(el);
   log.scrollTop = log.scrollHeight;
   return el;
+}
+
+// 스트리밍 델타 누적 — 단어 모드면 토큰 span 으로 감싸 등장 애니메이션, 아니면 텍스트 누적. 커서 앞에 삽입.
+function appendDelta(bubble, caret, delta) {
+  if (WORD_MODE) {
+    const s = document.createElement("span");
+    s.className = "tok";
+    s.textContent = delta;
+    bubble.insertBefore(s, caret);
+  } else {
+    bubble.insertBefore(document.createTextNode(delta), caret);
+  }
+  log.scrollTop = log.scrollHeight;
+}
+
+// 도구 호출 표시 — TOOL_UI 연출에 맞춰 렌더. (각 SSE trace 이벤트가 한 단계)
+function addTrace(t) {
+  const tool = (t && t.tool) || "tool";
+  const wrap = document.createElement("div");
+  wrap.className = "trace trace--" + TOOL_UI;
+  if (TOOL_ANIM === "spinner") {
+    const sp = document.createElement("span");
+    sp.className = "sc-spinner";
+    wrap.appendChild(sp);
+  } else if (TOOL_ANIM === "pulse") {
+    const sp = document.createElement("span");
+    sp.className = "sc-pulse";
+    sp.textContent = "●";
+    wrap.appendChild(sp);
+  }
+  if (TOOL_UI === "chips") {
+    const c = document.createElement("span");
+    c.className = "chip";
+    c.textContent = "🔧 " + tool;
+    wrap.appendChild(c);
+  } else if (TOOL_UI === "terminal") {
+    const code = document.createElement("span");
+    code.textContent = "$ " + tool + "()";
+    wrap.appendChild(code);
+  } else if (TOOL_UI === "inline-status") {
+    const s = document.createElement("span");
+    s.textContent = "🔧 " + tool + " 실행 중…";
+    wrap.appendChild(s);
+  } else if (TOOL_UI === "timeline") {
+    const dot = document.createElement("span");
+    dot.className = "trace__dot";
+    wrap.appendChild(dot);
+    const s = document.createElement("span");
+    s.textContent = tool;
+    wrap.appendChild(s);
+  } else {
+    // card
+    const s = document.createElement("span");
+    s.textContent = "⚙ 도구 호출: " + tool;
+    wrap.appendChild(s);
+  }
+  log.appendChild(wrap);
+  log.scrollTop = log.scrollHeight;
 }
 
 // 출처(인용) 칩 렌더 — citationStyle 에 맞게 다듬는다.
@@ -2431,6 +2764,10 @@ form.addEventListener("submit", async (e) => {
   add("user", message);
   input.value = "";
   const bot = add("bot", "");
+  const caret = document.createElement("span");
+  caret.className = CURSOR ? "caret" : "caret caret--none";
+  caret.textContent = CURSOR;
+  bot.appendChild(caret);
   try {
     const res = await fetch("/api/chat/stream", {
       method: "POST",
@@ -2451,13 +2788,14 @@ form.addEventListener("submit", async (e) => {
         if (!line) continue;
         try {
           const ev = JSON.parse(line.slice(5).trim());
-          if (ev.trace) add("trace", "🔧 도구 호출: " + ev.trace.tool);
-          if (ev.delta) bot.textContent += ev.delta;
+          if (ev.trace) addTrace(ev.trace);
+          if (ev.delta) appendDelta(bot, caret, ev.delta);
           if (ev.sources) addSources(ev.sources);
         } catch (_) { /* skip */ }
       }
       log.scrollTop = log.scrollHeight;
     }
+    caret.remove();
   } catch (_) {
     bot.textContent = "오류가 발생했습니다.";
   }
@@ -2518,6 +2856,37 @@ body { margin: 0; font-family: var(--font-body); color: var(--color-text); backg
 .chat__input { flex: 1; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 8px; font: inherit; }
 .chat__send { padding: 10px 16px; border: none; border-radius: 8px; background: var(--color-accent); color: #fff; cursor: pointer; }
 .chat__send:focus-visible, .chat__input:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+/* ===== UI 연출 (presentation) — 페이싱 260ms ===== */
+:root { --pace: 260ms; }
+@keyframes sc-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sc-fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes sc-pop { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: scale(1); } }
+@keyframes sc-slide { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes sc-blink { 0%,45% { opacity: 1; } 50%,95% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes sc-tok-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sc-tok-blur { from { opacity: 0; filter: blur(6px); } to { opacity: 1; filter: blur(0); } }
+@keyframes sc-tok-slide { from { opacity: 0; transform: translateY(.5em); } to { opacity: 1; transform: translateY(0); } }
+@keyframes sc-spin { to { transform: rotate(360deg); } }
+/* 메시지 등장: fade-up */
+.bubble, .trace, .sources { animation: sc-fade-up var(--pace) cubic-bezier(.22,1,.36,1) both; }
+/* 스트리밍 글자 생성: typewriter (단어모드=false) */
+.tok { display: inline; }
+.caret { animation: sc-blink 1s step-end infinite; margin-left: 1px; }
+.caret--none { display: none; }
+/* 진행 인디케이터 */
+.sc-spinner { display: inline-block; width: 12px; height: 12px; margin-right: 6px; border: 2px solid var(--color-accent); border-right-color: transparent; border-radius: 50%; vertical-align: -2px; animation: sc-spin .7s linear infinite; }
+.sc-pulse { display: inline-block; margin-right: 6px; color: var(--color-accent); animation: sc-blink 1.2s ease-in-out infinite; }
+/* 도구 호출 UI: card */
+.trace { align-self: flex-start; max-width: 80%; display: flex; align-items: center; gap: 6px; padding: 8px 12px; border: 1px dashed var(--color-border); border-radius: 8px; color: var(--color-muted); font-size: 12px; }
+.trace--terminal { font-family: var(--font-mono, monospace); background: #0d1117; color: #c9d1d9; border-style: solid; }
+.trace--chips { border: none; padding: 0 4px; }
+.trace--inline-status { border: none; padding: 2px 4px; }
+.trace--timeline .trace__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--color-accent); flex: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bubble, .trace, .sources, .tok, .caret, .sc-spinner, .sc-pulse { animation: none !important; }
+}
 ",
   "src/chat.ts": "// 채팅 오케스트레이션: (RAG 검색) → LLM (스트리밍).
 // 동작: rag-cited / 멀티턴: true / 스트리밍: true / 인용: "chips".

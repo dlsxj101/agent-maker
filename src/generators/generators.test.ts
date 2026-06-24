@@ -351,6 +351,41 @@ describe("공공기관 제약 반영 (제품 핵심 보장)", () => {
   });
 });
 
+describe("UI 연출 반영 (presentation, §10)", () => {
+  it("기본 연출(타자기·카드·페이드업)이 app.js/styles.css 에 반영된다", () => {
+    const m = fileMap(generateArtifacts(cloudSpec, { now: FIXED_NOW }));
+    const js = m["public/app.js"];
+    const css = m["public/styles.css"];
+    expect(js).toContain('const STREAM_ANIM = "typewriter"');
+    expect(js).toContain('const CURSOR = "▏"');
+    expect(js).toContain("const WORD_MODE = false");
+    expect(js).toContain('const TOOL_UI = "card"');
+    expect(css).toContain("--pace: 260ms");
+    expect(css).toContain("@keyframes sc-fade-up");
+    expect(css).toContain("prefers-reduced-motion");
+  });
+
+  it("비-기본 연출(단어페이드·블록커서·타임라인·슬라이드·느긋)이 산출물에 그대로 반영된다", () => {
+    const m = fileMap(generateArtifacts(toolAgentSpec, { now: FIXED_NOW }));
+    const js = m["public/app.js"];
+    const css = m["public/styles.css"];
+    expect(js).toContain('const STREAM_ANIM = "fade-in-words"');
+    expect(js).toContain("const WORD_MODE = true");
+    expect(js).toContain('const CURSOR = "█"');
+    expect(js).toContain('const TOOL_UI = "timeline"');
+    expect(js).toContain('const TOOL_ANIM = "stagger"');
+    expect(css).toContain("--pace: 420ms"); // relaxed
+    expect(css).toContain(".trace--timeline");
+    expect(css).toContain("animation: sc-slide"); // messageEntrance=slide
+  });
+
+  it("DESIGN.md 에 UI 연출 섹션이 포함된다", () => {
+    const design = fileMap(generateArtifacts(toolAgentSpec, { now: FIXED_NOW }))["DESIGN.md"];
+    expect(design).toContain("UI 연출");
+    expect(design).toContain("타임라인"); // toolCallUi=timeline 라벨
+  });
+});
+
 describe("ZIP round-trip", () => {
   it("묶었다가 풀면 원본 파일 내용이 복원된다", () => {
     const files = generateArtifacts(cloudSpec, { now: FIXED_NOW });
